@@ -1,4 +1,5 @@
 use rand::{thread_rng, Rng};
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 pub type Vec2d = (f64, f64);
@@ -82,6 +83,8 @@ fn get_perlin_value(x: usize, y: usize, perlin_vectors: &Vec<Vec<Vec2d>>, period
 }
 
 pub fn gen_single_layer_perlin_greyscale(width: usize, height: usize, period: usize) -> Vec<Vec<f64>> {
+    assert!(period >= 1);
+
     let lattice_w = ((width.saturating_sub(1)) as f64 / period as f64).floor() as usize + 2;
     let lattice_h = ((height.saturating_sub(1)) as f64 / period as f64).floor() as usize + 2;
     let lattice_w = lattice_w.max(2);
@@ -91,14 +94,17 @@ pub fn gen_single_layer_perlin_greyscale(width: usize, height: usize, period: us
         .collect();
 
     let mut result_px_grid: Vec<Vec<f64>> = vec![vec![0.0; width]; height];
-    for y in 0..height {
-        for x in 0..width {
-            let perlin_value = get_perlin_value(x, y, &perlin_vectors, period);
-            result_px_grid[y][x] = 128.0 + 128.0 * perlin_value;
-        }
-    }
+    result_px_grid
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(y, row)| {
+            for x in 0..width {
+                let perlin_value = get_perlin_value(x, y, &perlin_vectors, period);
+                row[x] = 128.0 + 128.0 * perlin_value;
+            }
+        });
 
-    return result_px_grid;
+    result_px_grid
 }
 
 pub fn gen_octaved_perlin_greyscale(width: usize, height: usize, start_period: usize, octaves: usize, attenuation: f64) -> Vec<Vec<f64>> {
@@ -119,12 +125,15 @@ pub fn gen_octaved_perlin_greyscale(width: usize, height: usize, start_period: u
             .map(|_| (0..lattice_w).map(|_| rand_vec2d()).collect())
             .collect();
 
-        for y in 0..height {
-            for x in 0..width {
-                let v = get_perlin_value(x, y, &perlin_vectors, period);
-                final_grid[y][x] += v * octave_attenuation;
-            }
-        }
+        final_grid
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(y, row)| {
+                for x in 0..width {
+                    let v = get_perlin_value(x, y, &perlin_vectors, period);
+                    row[x] += v * octave_attenuation;
+                }
+            });
     }
 
     let max_value: f64 = (0..octaves)
@@ -132,12 +141,15 @@ pub fn gen_octaved_perlin_greyscale(width: usize, height: usize, start_period: u
         .sum();
 
     let mut result_px_grid: Vec<Vec<f64>> = vec![vec![0.0; width]; height];
-    for y in 0..height {
-        for x in 0..width {
-            let n = final_grid[y][x] / max_value;
-            result_px_grid[y][x] = 128.0 + 128.0 * n;
-        }
-    }
+    result_px_grid
+        .par_iter_mut()
+        .zip(final_grid.par_iter())
+        .for_each(|(out_row, acc_row)| {
+            for x in 0..width {
+                let n = acc_row[x] / max_value;
+                out_row[x] = 128.0 + 128.0 * n;
+            }
+        });
 
     result_px_grid
 }
