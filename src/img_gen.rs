@@ -39,10 +39,10 @@ pub fn gen_greyscale_img_from_vec(noise_vec: Vec<Vec<f64>>) -> () {
         }
     }
 
-    let out_dir = Path::new("../output_imgs");
-    fs::create_dir_all(out_dir).unwrap();
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
     let out_path = out_dir.join("greyscale_perlin_noise_output.png");
-    img.save(out_path).unwrap();
+    img.save(&out_path).unwrap();
 
-    println!("saved it boss! :)");
+    println!("saved to {}", out_path.display());
 }
