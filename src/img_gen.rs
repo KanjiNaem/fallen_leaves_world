@@ -2,6 +2,33 @@ use std::fs;
 use std::path::Path;
 use image::{ImageBuffer, Luma};
 
+pub fn get_grey_with_waterlvl_highlighted(noise_vec: Vec<Vec<f64>>, water_level: f64) -> () {
+
+    let width = noise_vec.len();
+    let height = noise_vec[0].len();
+    let noise_vec_flat: Vec<f64> = noise_vec.iter().flatten().cloned().collect();
+
+    let mut min_val = noise_vec_flat[0];
+    let mut max_val = noise_vec_flat[0];
+    for &curr_val in &noise_vec_flat {
+        if min_val > curr_val {
+            min_val = curr_val;
+        };
+        if max_val < curr_val {
+            max_val = curr_val
+        }
+    }
+
+    let range = if (max_val - min_val).abs() < f64::EPSILON {
+        1.0 // fix /0 issue, trust trust
+    } else {
+        max_val - min_val
+    };
+
+    let mut img: ImageBuffer<_, Vec<_>> = ImageBuffer::new(width as u32, height as u32);
+
+
+}
 
 pub fn gen_greyscale_img_from_vec(noise_vec: Vec<Vec<f64>>) -> () {
 
