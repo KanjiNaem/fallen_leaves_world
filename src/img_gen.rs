@@ -27,31 +27,67 @@ fn lerp_channel(a: f64, b: f64, t: f64) -> u8 {
     (a + (b - a) * t).round().clamp(0.0, 255.0) as u8
 }
 
-fn land_elevation_color(t: f64) -> Rgb<u8> {
-    let t = t.clamp(0.0, 1.0);
-    const STOPS: &[(f64, [f64; 3])] = &[
-        (0.0, [28.0, 88.0, 42.0]),
-        (0.22, [52.0, 128.0, 62.0]),
-        (0.42, [168.0, 152.0, 98.0]),
-        (0.65, [118.0, 102.0, 86.0]),
-        (1.0, [248.0, 250.0, 255.0]),
-    ];
-    let mut i = 0usize;
-    while i + 1 < STOPS.len() && t > STOPS[i + 1].0 {
-        i += 1;
-    }
-    let (t0, c0) = STOPS[i];
-    let (t1, c1) = STOPS[i + 1];
-    let span = (t1 - t0).max(1e-9);
-    let u = ((t - t0) / span).clamp(0.0, 1.0);
-    Rgb([
-        lerp_channel(c0[0], c1[0], u),
-        lerp_channel(c0[1], c1[1], u),
-        lerp_channel(c0[2], c1[2], u),
-    ])
+#[derive(Clone, Debug)]
+pub struct LandElevationPalette {
+    pub t_yellow: f64,
+    pub t_orange: f64,
+    pub t_red: f64,
+    pub green: [f64; 3],
+    pub yellow: [f64; 3],
+    pub orange: [f64; 3],
+    pub red: [f64; 3],
+    pub black: [f64; 3],
 }
 
-/// Full heightmap as greyscale (Luma). Uses grid min/max to map values to 0–255.
+impl Default for LandElevationPalette {
+    fn default() -> Self {
+        Self {
+            t_yellow: 0.28,
+            t_orange: 0.52,
+            t_red: 0.78,
+            green: [34.0, 160.0, 55.0],
+            yellow: [255.0, 230.0, 45.0],
+            orange: [255.0, 130.0, 25.0],
+            red: [200.0, 25.0, 25.0],
+            black: [0.0, 0.0, 0.0],
+        }
+    }
+}
+
+impl LandElevationPalette {
+    #[inline]
+    pub fn land_color(&self, t: f64) -> Rgb<u8> {
+        let t = t.clamp(0.0, 1.0);
+        let ty = self.t_yellow.clamp(f64::EPSILON, 1.0 - 3.0 * f64::EPSILON);
+        let to = self
+            .t_orange
+            .clamp(ty + f64::EPSILON, 1.0 - 2.0 * f64::EPSILON);
+        let tr = self.t_red.clamp(to + f64::EPSILON, 1.0 - f64::EPSILON);
+
+        let stops: [(f64, [f64; 3]); 5] = [
+            (0.0, self.green),
+            (ty, self.yellow),
+            (to, self.orange),
+            (tr, self.red),
+            (1.0, self.black),
+        ];
+
+        let mut i = 0usize;
+        while i + 1 < stops.len() && t > stops[i + 1].0 {
+            i += 1;
+        }
+        let (t0, c0) = stops[i];
+        let (t1, c1) = stops[i + 1];
+        let span = (t1 - t0).max(1e-9);
+        let u = ((t - t0) / span).clamp(0.0, 1.0);
+        Rgb([
+            lerp_channel(c0[0], c1[0], u),
+            lerp_channel(c0[1], c1[1], u),
+            lerp_channel(c0[2], c1[2], u),
+        ])
+    }
+}
+
 pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
@@ -76,7 +112,11 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>) {
     println!("saved to {}", out_path.display());
 }
 
-pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level: f64) {
+pub fn gen_grey_with_waterlvl_highlighted(
+    noise_vec: &Vec<Vec<f64>>,
+    water_level: f64,
+    land_palette: &LandElevationPalette,
+) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
     let (min_val, _, range) = min_max_range_2d(noise_vec);
@@ -99,7 +139,7 @@ pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level
                     (norm - norm_water_lvl) / land_denom
                 };
                 let t = land_scale.clamp(0.0, 1.0);
-                land_elevation_color(t)
+                land_palette.land_color(t)
             };
 
             img.put_pixel(x as u32, y as u32, px_color);
