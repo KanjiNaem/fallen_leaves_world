@@ -1,8 +1,9 @@
-use fallen_leaves_world::{elevation_redistrib, img_gen, perlin_greyscale};
-
+use fallen_leaves_world::{world_gen_pipeline, img_gen};
 fn main() {
-    let grid = perlin_greyscale::gen_octaved_perlin_greyscale(5000, 5000, 500, 8, 0.7);
-    let _terrace = elevation_redistrib::apply_terrace_redistrib(&grid, 10.0, true);
-    // img_gen::gen_greyscale_img_from_vec(&terrace);
-    img_gen::gen_grey_with_waterlvl_highlighted(&grid, 100.0);
+    let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(1000, 1000, 500, 8, 0.7, 100.0);
+
+
+    img_gen::gen_greyscale_img_from_vec(&pipeline.noise_base, format!("grey_pre_water_pass.png"));
+    img_gen::gen_grey_with_waterlvl_highlighted(&pipeline.noise_base, 100.0, format!("normal.png"));
+    img_gen::gen_grey_with_waterlvl_highlighted(&pipeline.smooth_noise, 100.0, format!("smooth.png"));
 }

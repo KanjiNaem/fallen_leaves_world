@@ -52,7 +52,7 @@ fn land_elevation_color(t: f64) -> Rgb<u8> {
 }
 
 /// Full heightmap as greyscale (Luma). Uses grid min/max to map values to 0–255.
-pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>) {
+pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
     let (min_val, _max_val, range) = min_max_range_2d(noise_vec);
@@ -70,13 +70,13 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>) {
 
     let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
     fs::create_dir_all(&out_dir).unwrap();
-    let out_path = out_dir.join("greyscale_perlin_noise_output.png");
+    let out_path = out_dir.join(file_name);
     img.save(&out_path).unwrap();
 
     println!("saved to {}", out_path.display());
 }
 
-pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level: f64) {
+pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level: f64, file_name: String) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
     let (min_val, _, range) = min_max_range_2d(noise_vec);
@@ -108,7 +108,7 @@ pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level
 
     let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
     fs::create_dir_all(&out_dir).unwrap();
-    let out_path = out_dir.join("elevation_color_preview.png");
+    let out_path = out_dir.join(file_name);
     img.save(&out_path).unwrap();
 
     println!("saved to {}", out_path.display());
