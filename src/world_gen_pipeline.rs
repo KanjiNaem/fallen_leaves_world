@@ -9,6 +9,7 @@ pub struct WorldPipelineStepStruct {
     pub noise_base: Vec<Vec<f64>>,
     pub smooth_noise: Vec<Vec<f64>>,
     pub moisture_map: Vec<Vec<f64>>,
+    pub wind_col_map: Vec<Vec<f64>>
 }
 
 pub fn gen_world_pipeline_step_struct(
@@ -45,10 +46,14 @@ pub fn gen_world_pipeline_step_struct(
         moisture_rainfall_mask::gen_moisture_rainfall_mask(&smooth_noise, water_lvl, rain_coeff);
     println!("done!");
 
+    println!("generating wind column map!");
+    let wind_col_map = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, start_period * 4);
+
     WorldPipelineStepStruct {
         water_lvl,
         noise_base,
         smooth_noise,
         moisture_map,
+        wind_col_map
     }
 }
