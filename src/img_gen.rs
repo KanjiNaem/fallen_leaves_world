@@ -113,7 +113,65 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) 
     println!("saved to {}", out_path.display());
 }
 
-pub fn gen_grey_with_waterlvl_highlighted(noise_vec: &Vec<Vec<f64>>, water_level: f64, land_palette: &LandElevationPalette, file_name: String) {
+/// blue, dry land tan, wet land cyan -> white; rainfall scaled to max on land only
+pub fn gen_rainfall_map_img(
+    rainfall: &Vec<Vec<f64>>,
+    terrain: &Vec<Vec<f64>>,
+    water_level: f64,
+    file_name: String,
+) {
+    let grid_h = rainfall.len();
+    let grid_w = rainfall[0].len();
+    let ocean = Rgb([20u8, 66, 114]);
+    let dry_land = Rgb([168u8, 145, 98]);
+    let wet_low = Rgb([55u8, 145, 175]);
+    let wet_high = Rgb([235u8, 245, 255]);
+
+    // fixed scale so moderate rain reads as visibly wet (not drowned by one peak)
+    let rain_scale = 22.0f64;
+
+    let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
+
+    for y in 0..grid_h {
+        for x in 0..grid_w {
+            let px_color = if terrain[y][x] <= water_level {
+                ocean
+            } else {
+                let t = (rainfall[y][x] / rain_scale).clamp(0.0, 1.0);
+                if t < 0.5 {
+                    let u = t / 0.5;
+                    Rgb([
+                        lerp_channel(dry_land.0[0] as f64, wet_low.0[0] as f64, u),
+                        lerp_channel(dry_land.0[1] as f64, wet_low.0[1] as f64, u),
+                        lerp_channel(dry_land.0[2] as f64, wet_low.0[2] as f64, u),
+                    ])
+                } else {
+                    let u = (t - 0.5) / 0.5;
+                    Rgb([
+                        lerp_channel(wet_low.0[0] as f64, wet_high.0[0] as f64, u),
+                        lerp_channel(wet_low.0[1] as f64, wet_high.0[1] as f64, u),
+                        lerp_channel(wet_low.0[2] as f64, wet_high.0[2] as f64, u),
+                    ])
+                }
+            };
+            img.put_pixel(x as u32, y as u32, px_color);
+        }
+    }
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
+    let out_path = out_dir.join(file_name);
+    img.save(&out_path).unwrap();
+
+    println!("saved to {}", out_path.display());
+}
+
+pub fn gen_grey_with_waterlvl_highlighted(
+    noise_vec: &Vec<Vec<f64>>,
+    water_level: f64,
+    land_palette: &LandElevationPalette,
+    file_name: String,
+) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
     let (min_val, _, range) = min_max_range_2d(noise_vec);

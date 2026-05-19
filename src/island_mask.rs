@@ -5,11 +5,7 @@ use rayon::prelude::*;
 fn smoothstep(edge_left: f64, edge_right: f64, x: f64) -> f64 {
     let denom = edge_right - edge_left;
     if denom.abs() <= f64::EPSILON {
-        return if x < edge_left {
-            0.0
-        } else {
-            1.0
-        };
+        return if x < edge_left { 0.0 } else { 1.0 };
     }
     let x_to_edge_dist = ((x - edge_left) / denom).clamp(0.0, 1.0);
     x_to_edge_dist * x_to_edge_dist * (3.0 - 2.0 * x_to_edge_dist)
@@ -17,14 +13,18 @@ fn smoothstep(edge_left: f64, edge_right: f64, x: f64) -> f64 {
 
 /// Suggested `band_span_fraction` for [`smooth_at_lvl`] (share of map min–max span used as band).
 pub const SUGGEST_BAND_FRAC: f64 = 0.12;
-// pub const SUGGEST_BAND_FRAC: f64 = 0.20;
 /// Suggested `keep_orig_power`: `1.0` = plain smoothstep blend; higher = stronger pull toward `water_level`.
-pub const SUGGEST_KEEP_POWER: f64 = 2.0;
-// pub const SUGGEST_KEEP_POWER: f64 = 5.0;
+pub const SUGGEST_KEEP_POWER: f64 = 1.25;
 /// Suggested floor for band width in heightmap units (avoids a vanishingly thin band on flat maps).
 pub const SUGGEST_MIN_BAND: f64 = 6.0;
 
-pub fn smooth_at_lvl(noise_map: &Vec<Vec<f64>>, water_level: f64, band_span_fraction: f64, keep_orig_power: f64, min_band: f64) -> Vec<Vec<f64>> {
+pub fn smooth_at_lvl(
+    noise_map: &Vec<Vec<f64>>,
+    water_level: f64,
+    band_span_fraction: f64,
+    keep_orig_power: f64,
+    min_band: f64,
+) -> Vec<Vec<f64>> {
     let mut min_val = f64::INFINITY;
     let mut max_val = f64::NEG_INFINITY;
     for row in noise_map {
