@@ -1,4 +1,5 @@
 pub mod elevation_redistrib;
+pub mod heightmap_view;
 pub mod img_gen;
 pub mod island_mask;
 pub mod moisture_rainfall_mask;

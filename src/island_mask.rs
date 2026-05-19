@@ -11,12 +11,13 @@ fn smoothstep(edge_left: f64, edge_right: f64, x: f64) -> f64 {
     x_to_edge_dist * x_to_edge_dist * (3.0 - 2.0 * x_to_edge_dist)
 }
 
-/// Suggested `band_span_fraction` for [`smooth_at_lvl`] (share of map min–max span used as band).
-pub const SUGGEST_BAND_FRAC: f64 = 0.12;
-/// Suggested `keep_orig_power`: `1.0` = plain smoothstep blend; higher = stronger pull toward `water_level`.
-pub const SUGGEST_KEEP_POWER: f64 = 1.25;
-/// Suggested floor for band width in heightmap units (avoids a vanishingly thin band on flat maps).
-pub const SUGGEST_MIN_BAND: f64 = 6.0;
+/// sugg band_span_fraction = 0.12;; share of map min–max span used as band
+// pub const SUGGEST_BAND_FRAC: f64 = 0.12;
+pub const SUGGEST_BAND_FRAC: f64 = 2.12;
+/// sugg keep_orig_power = 1;; higher = stronger pull toward `water_level`.
+pub const SUGGEST_KEEP_POWER: f64 = 2.0;
+/// sugg floor for band width in heightmap units = 6.0;; avoids a vanishingly thin band on flat maps
+pub const SUGGEST_MIN_BAND: f64 = 2.0;
 
 pub fn smooth_at_lvl(
     noise_map: &Vec<Vec<f64>>,
