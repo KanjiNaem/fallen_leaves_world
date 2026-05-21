@@ -1,11 +1,11 @@
-use crate::{island_mask, wind_column_gradient_map, perlin_greyscale};
+use crate::{island_mask, wind_col_grad_and_moisture_map, perlin_greyscale};
 pub struct WorldPipelineStepStruct {
     pub water_lvl: f64,
     pub noise_base: Vec<Vec<f64>>,
     pub smooth_noise: Vec<Vec<f64>>,
     pub wind_column_noise_base: Vec<Vec<f64>>,
     pub wind_column_gradient: Vec<Vec<Option<(usize, usize)>>>,
-    // pub moisture_map: Vec<Vec<f64>>,
+    pub moisture_map: Vec<Vec<f64>>,
 }
 
 pub fn gen_world_pipeline_step_struct(
@@ -41,13 +41,36 @@ pub fn gen_world_pipeline_step_struct(
     let wind_column_noise_base = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, start_period * 4);
     println!("done!");
 
-    println!("generating wind column gradient map");
-    let wind_column_gradient =  wind_column_gradient_map::gen_wind_column_gradient_map(
-        width, 
+    println!("generating flow maps");
+    let (ocean_dist_map, phi_map) = wind_col_grad_and_moisture_map::gen_flow_rank_maps(
+        width,
         height,
         &smooth_noise,
         start_period,
-        water_lvl
+        water_lvl,
+    );
+    println!("done!");
+
+    println!("generating wind column gradient map");
+    let wind_column_gradient = wind_col_grad_and_moisture_map::gen_upwind_map(
+        width,
+        height,
+        &phi_map,
+        &ocean_dist_map,
+        &smooth_noise,
+        water_lvl,
+    );
+    println!("done!");
+
+    println!("generating moisture map");
+    let moisture_map = wind_col_grad_and_moisture_map::gen_moisture_from_flow_maps(
+        width,
+        height,
+        &smooth_noise,
+        water_lvl,
+        &ocean_dist_map,
+        &phi_map,
+        &wind_column_gradient,
     );
     println!("done!");
 
@@ -57,5 +80,6 @@ pub fn gen_world_pipeline_step_struct(
         smooth_noise,
         wind_column_noise_base,
         wind_column_gradient,
+        moisture_map,
     }
 }

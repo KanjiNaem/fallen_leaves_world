@@ -27,6 +27,42 @@ fn lerp_channel(a: f64, b: f64, t: f64) -> u8 {
     (a + (b - a) * t).round().clamp(0.0, 255.0) as u8
 }
 
+#[inline]
+fn blend_rgb(base: Rgb<u8>, overlay: Rgb<u8>, overlay_weight: f64) -> Rgb<u8> {
+    let t = overlay_weight.clamp(0.0, 1.0);
+    Rgb([
+        lerp_channel(base.0[0] as f64, overlay.0[0] as f64, t),
+        lerp_channel(base.0[1] as f64, overlay.0[1] as f64, t),
+        lerp_channel(base.0[2] as f64, overlay.0[2] as f64, t),
+    ])
+}
+
+const OCEAN_RGB: Rgb<u8> = Rgb([20, 66, 114]);
+
+#[inline]
+fn terrain_elevation_color(
+    terrain: &Vec<Vec<f64>>,
+    x: usize,
+    y: usize,
+    min_val: f64,
+    range: f64,
+    norm_water_lvl: f64,
+    land_denom: f64,
+    land_palette: &LandElevationPalette,
+) -> Rgb<u8> {
+    let norm = ((terrain[y][x] - min_val) / range).clamp(0.0, 1.0);
+    if norm < norm_water_lvl {
+        OCEAN_RGB
+    } else {
+        let land_scale = if norm_water_lvl >= 1.0 {
+            0.0
+        } else {
+            (norm - norm_water_lvl) / land_denom
+        };
+        land_palette.land_color(land_scale.clamp(0.0, 1.0))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct LandElevationPalette {
     pub t_yellow: f64,
@@ -112,32 +148,47 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) 
     println!("saved to {}", out_path.display());
 }
 
-// blue, dry land tan, wet land cyan -> white; rainfall scaled to max on land only
 pub fn gen_rainfall_map_img(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
     water_level: f64,
+    land_palette: &LandElevationPalette,
     file_name: String,
 ) {
     let grid_h = rainfall.len();
     let grid_w = rainfall[0].len();
-    let ocean = Rgb([20u8, 66, 114]);
     let dry_land = Rgb([168u8, 145, 98]);
     let wet_low = Rgb([55u8, 145, 175]);
     let wet_high = Rgb([235u8, 245, 255]);
 
-    // fixed scale so moderate rain reads as visibly wet (not drowned by one peak)
+    let (min_val, _, range) = min_max_range_2d(terrain);
+    let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
+    let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
+
     let rain_scale = 22.0f64;
+    const MOISTURE_OVERLAY_MIN: f64 = 0.42;
+    const MOISTURE_OVERLAY_MAX: f64 = 0.78;
 
     let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
 
     for y in 0..grid_h {
         for x in 0..grid_w {
+            let elevation_color = terrain_elevation_color(
+                terrain,
+                x,
+                y,
+                min_val,
+                range,
+                norm_water_lvl,
+                land_denom,
+                land_palette,
+            );
+
             let px_color = if terrain[y][x] <= water_level {
-                ocean
+                elevation_color
             } else {
                 let t = (rainfall[y][x] / rain_scale).clamp(0.0, 1.0);
-                if t < 0.5 {
+                let moisture_color = if t < 0.5 {
                     let u = t / 0.5;
                     Rgb([
                         lerp_channel(dry_land.0[0] as f64, wet_low.0[0] as f64, u),
@@ -151,8 +202,11 @@ pub fn gen_rainfall_map_img(
                         lerp_channel(wet_low.0[1] as f64, wet_high.0[1] as f64, u),
                         lerp_channel(wet_low.0[2] as f64, wet_high.0[2] as f64, u),
                     ])
-                }
+                };
+                let overlay = MOISTURE_OVERLAY_MIN + t * (MOISTURE_OVERLAY_MAX - MOISTURE_OVERLAY_MIN);
+                blend_rgb(elevation_color, moisture_color, overlay)
             };
+
             img.put_pixel(x as u32, y as u32, px_color);
         }
     }
@@ -182,20 +236,16 @@ pub fn gen_grey_with_waterlvl_highlighted(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let norm = ((noise_vec[y][x] - min_val) / range).clamp(0.0, 1.0);
-
-            let px_color = if norm < norm_water_lvl {
-                Rgb([20, 66, 114])
-            } else {
-                let land_scale = if norm_water_lvl >= 1.0 {
-                    0.0
-                } else {
-                    (norm - norm_water_lvl) / land_denom
-                };
-                let t = land_scale.clamp(0.0, 1.0);
-                land_palette.land_color(t)
-            };
-
+            let px_color = terrain_elevation_color(
+                noise_vec,
+                x,
+                y,
+                min_val,
+                range,
+                norm_water_lvl,
+                land_denom,
+                land_palette,
+            );
             img.put_pixel(x as u32, y as u32, px_color);
         }
     }
@@ -297,24 +347,22 @@ pub fn gen_upwind_sparse_arrow_img(
     let (min_val, _, range) = min_max_range_2d(terrain);
     let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
     let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
-    let ocean = Rgb([20u8, 66, 114]);
     let arrow = Rgb([120u8, 235, 255]);
 
     let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let norm = ((terrain[y][x] - min_val) / range).clamp(0.0, 1.0);
-            let px_color = if norm < norm_water_lvl {
-                ocean
-            } else {
-                let land_scale = if norm_water_lvl >= 1.0 {
-                    0.0
-                } else {
-                    (norm - norm_water_lvl) / land_denom
-                };
-                land_palette.land_color(land_scale.clamp(0.0, 1.0))
-            };
+            let px_color = terrain_elevation_color(
+                terrain,
+                x,
+                y,
+                min_val,
+                range,
+                norm_water_lvl,
+                land_denom,
+                land_palette,
+            );
             img.put_pixel(x as u32, y as u32, px_color);
         }
     }

@@ -108,7 +108,7 @@ pub fn gen_single_layer_perlin_greyscale(
         .for_each(|(y, row)| {
             for x in 0..width {
                 let perlin_value = get_perlin_value(x, y, &perlin_vectors, period);
-                row[x] = 128.0 + 128.0 * perlin_value;
+                row[x] = 255.0 + 255.0 * perlin_value;
             }
         });
 
@@ -156,7 +156,7 @@ pub fn gen_octaved_perlin_greyscale(
         .for_each(|(out_row, acc_row)| {
             for x in 0..width {
                 let n = acc_row[x] / max_value;
-                out_row[x] = 128.0 + 128.0 * n;
+                out_row[x] = 255.0 + 255.0 * n;
             }
         });
 
