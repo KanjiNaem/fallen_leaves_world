@@ -20,14 +20,8 @@ fn main() {
         &img_gen::LandElevationPalette::default(),
         format!("smooth.png"),
     );
-    img_gen::gen_rainfall_map_img(
-        &pipeline.moisture_map,
-        &pipeline.smooth_noise,
-        water_lvl,
-        format!("rainfall.png"),
-    );
-    img_gen::gen_grey_with_waterlvl_highlighted(&pipeline.wind_col_map,
+    img_gen::gen_grey_with_waterlvl_highlighted(&pipeline.wind_column_noise_base,
         0.0,
         &img_gen::LandElevationPalette::default(),
-        format!("wind_col_map.png"));
+        format!("wind_col_base.png"));
 }
