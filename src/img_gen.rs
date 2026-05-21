@@ -88,7 +88,6 @@ impl LandElevationPalette {
     }
 }
 
-/// Full heightmap as greyscale (Luma). Uses grid min/max to map values to 0–255.
 pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
@@ -113,7 +112,7 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) 
     println!("saved to {}", out_path.display());
 }
 
-/// blue, dry land tan, wet land cyan -> white; rainfall scaled to max on land only
+// blue, dry land tan, wet land cyan -> white; rainfall scaled to max on land only
 pub fn gen_rainfall_map_img(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
@@ -206,5 +205,151 @@ pub fn gen_grey_with_waterlvl_highlighted(
     let out_path = out_dir.join(file_name);
     img.save(&out_path).unwrap();
 
+    println!("saved to {}", out_path.display());
+}
+
+fn put_square(img: &mut RgbImage, cx: i32, cy: i32, half: i32, color: Rgb<u8>) {
+    let width = img.width() as i32;
+    let height = img.height() as i32;
+    for dy in -half..=half {
+        for dx in -half..=half {
+            let x = cx + dx;
+            let y = cy + dy;
+            if x >= 0 && y >= 0 && x < width && y < height {
+                img.put_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+}
+
+fn draw_thick_line_rgb(
+    img: &mut RgbImage,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    stroke: i32,
+    color: Rgb<u8>,
+) {
+    let mut x = x0;
+    let mut y = y0;
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+
+    loop {
+        put_square(img, x, y, stroke, color);
+        if x == x1 && y == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+fn draw_flow_arrow(
+    img: &mut RgbImage,
+    x: i32,
+    y: i32,
+    ux: i32,
+    uy: i32,
+    shaft_len: i32,
+    stroke: i32,
+    head_len: i32,
+    color: Rgb<u8>,
+) {
+    if ux == 0 && uy == 0 {
+        return;
+    }
+    let tip_x = x + ux * shaft_len;
+    let tip_y = y + uy * shaft_len;
+    draw_thick_line_rgb(img, x, y, tip_x, tip_y, stroke, color);
+
+    let px = -uy;
+    let py = ux;
+    let back_x = tip_x - ux * head_len;
+    let back_y = tip_y - uy * head_len;
+    let wing = head_len;
+    draw_thick_line_rgb(img, tip_x, tip_y, back_x + px * wing, back_y + py * wing, stroke, color);
+    draw_thick_line_rgb(img, tip_x, tip_y, back_x - px * wing, back_y - py * wing, stroke, color);
+}
+
+pub fn gen_upwind_sparse_arrow_img(
+    upwind: &Vec<Vec<Option<(usize, usize)>>>,
+    terrain: &Vec<Vec<f64>>,
+    water_level: f64,
+    land_palette: &LandElevationPalette,
+    step: usize,
+    file_name: String,
+) {
+    let grid_h = terrain.len();
+    let grid_w = terrain[0].len();
+    let step = step.max(1);
+    let (min_val, _, range) = min_max_range_2d(terrain);
+    let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
+    let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
+    let ocean = Rgb([20u8, 66, 114]);
+    let arrow = Rgb([120u8, 235, 255]);
+
+    let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
+
+    for y in 0..grid_h {
+        for x in 0..grid_w {
+            let norm = ((terrain[y][x] - min_val) / range).clamp(0.0, 1.0);
+            let px_color = if norm < norm_water_lvl {
+                ocean
+            } else {
+                let land_scale = if norm_water_lvl >= 1.0 {
+                    0.0
+                } else {
+                    (norm - norm_water_lvl) / land_denom
+                };
+                land_palette.land_color(land_scale.clamp(0.0, 1.0))
+            };
+            img.put_pixel(x as u32, y as u32, px_color);
+        }
+    }
+
+    for y in (0..grid_h).step_by(step) {
+        for x in (0..grid_w).step_by(step) {
+            if terrain[y][x] <= water_level {
+                continue;
+            }
+            let Some((nx, ny)) = upwind[y][x] else {
+                continue;
+            };
+            // parent is upwind; moisture flows downwind (+grad Φ)
+            let ux = x as i32 - nx as i32;
+            let uy = y as i32 - ny as i32;
+            const SHAFT_LEN: i32 = 18;
+            const STROKE: i32 = 2;
+            const HEAD_LEN: i32 = 6;
+            draw_flow_arrow(
+                &mut img,
+                x as i32,
+                y as i32,
+                ux,
+                uy,
+                SHAFT_LEN,
+                STROKE,
+                HEAD_LEN,
+                arrow,
+            );
+        }
+    }
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
+    let out_path = out_dir.join(file_name);
+    img.save(&out_path).unwrap();
     println!("saved to {}", out_path.display());
 }

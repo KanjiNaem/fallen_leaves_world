@@ -3,7 +3,6 @@
 // gen dist_ocean_map
 // gen phy map: Φ = dist_ocean + lambda \* norm_perlin; --> scalar potential map
 // gen upwind_neighbor_map with acyclic edge case decission; --> one parent per cell acyclic map
-// gen rainfall map from this
 
 use crate::perlin_greyscale;
 use std::collections::VecDeque;
@@ -120,7 +119,7 @@ fn get_flow_rank(phi: f64, dist_ocean: f64, x: usize, y: usize, width: usize) ->
     (phi, dist_ocean, x + width * y)
 }
 
-/// Φ = dist_ocean + lambda * norm_perlin (Φ = 0 for ocean tiles)
+// Φ = dist_ocean + lambda * norm_perlin (Φ = 0 for ocean tiles)
 fn gen_phi_current_map(
     terrain_map: &Vec<Vec<f64>>,
     width: usize,

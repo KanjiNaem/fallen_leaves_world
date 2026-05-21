@@ -5,7 +5,7 @@ async fn main() {
     let water_lvl = 120.0;
     let rain_coeff = 1.0;
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
-        1000, 1000, 500, 8, 0.7, water_lvl, rain_coeff,
+        1800, 1800, 500, 8, 0.7, water_lvl, rain_coeff,
     );
 
     heightmap_view::view_heightmap(

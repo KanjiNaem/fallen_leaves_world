@@ -24,4 +24,12 @@ fn main() {
         0.0,
         &img_gen::LandElevationPalette::default(),
         format!("wind_col_base.png"));
+    img_gen::gen_upwind_sparse_arrow_img(
+        &pipeline.wind_column_gradient,
+        &pipeline.smooth_noise,
+        water_lvl,
+        &img_gen::LandElevationPalette::default(),
+        24,
+        format!("wind_upwind_arrows.png"),
+    );
 }

@@ -5,3 +5,4 @@ pub mod island_mask;
 pub mod wind_column_gradient_map;
 pub mod perlin_greyscale;
 pub mod world_gen_pipeline;
+pub mod moisture_and_rainfall_pass;
