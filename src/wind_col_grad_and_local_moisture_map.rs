@@ -1,12 +1,12 @@
-// gen norm_perlin map 
-// set lambda (0.2-0.5 ish) 
+// gen norm_perlin map
+// set lambda (0.2-0.5 ish)
 // gen dist_ocean_map
 // gen phy map: Φ = dist_ocean + lambda \* norm_perlin; --> scalar potential map
 // gen upwind_neighbor_map with acyclic edge case decission; --> one parent per cell acyclic map
 
-use crate::perlin_greyscale;
-use std::collections::VecDeque;
+use crate::{helpers, perlin_greyscale};
 use rayon::prelude::*;
+use std::collections::VecDeque;
 
 const BASE_MOISTURE_LEAK: f64 = 10.0;
 const HEIGHT_DIFF_MOISTURE_COEF: f64 = 1.5;
@@ -100,7 +100,14 @@ fn precompute_coastal_source_potential(
                     continue;
                 }
                 row[x] = adjacent_water_moisture_potential(
-                    x, y, width, height, terrain_map, water_body_size, water_lvl, map_area,
+                    x,
+                    y,
+                    width,
+                    height,
+                    terrain_map,
+                    water_body_size,
+                    water_lvl,
+                    map_area,
                 );
             }
         });
@@ -117,9 +124,15 @@ pub fn gen_moisture_from_flow_maps(
     upwind_neighbor_map: &Vec<Vec<Option<(usize, usize)>>>,
 ) -> Vec<Vec<f64>> {
     let map_area = (width * height) as f64;
-    let water_body_size = gen_water_body_size(width, height, terrain_map, water_lvl);
-    let coastal_source =
-        precompute_coastal_source_potential(width, height, terrain_map, &water_body_size, water_lvl, map_area);
+    let water_body_size = helpers::gen_water_body_size(width, height, terrain_map, water_lvl);
+    let coastal_source = precompute_coastal_source_potential(
+        width,
+        height,
+        terrain_map,
+        &water_body_size,
+        water_lvl,
+        map_area,
+    );
 
     let upwind = upwind_neighbor_map;
     let mut land_cells: Vec<(usize, usize, Option<(usize, usize)>)> = (0..height)
@@ -182,8 +195,14 @@ pub fn gen_moisture_map(
 ) -> Vec<Vec<f64>> {
     let (ocean_dist_map, phi_map) =
         gen_flow_rank_maps(width, height, terrain_map, map_start_period, water_lvl);
-    let upwind_neighbor_map =
-        gen_upwind_map(width, height, &phi_map, &ocean_dist_map, terrain_map, water_lvl);
+    let upwind_neighbor_map = gen_upwind_map(
+        width,
+        height,
+        &phi_map,
+        &ocean_dist_map,
+        terrain_map,
+        water_lvl,
+    );
     gen_moisture_from_flow_maps(
         width,
         height,
@@ -237,8 +256,7 @@ pub fn gen_wind_column_gradient_map(
 }
 
 fn normalize_perlin_map(width: usize, height: usize, period: usize) -> Vec<Vec<f64>> {
-    let mut norm_perl =
-        perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, period);
+    let mut norm_perl = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, period);
     let (min_val, max_val) = norm_perl
         .par_iter()
         .flatten()
@@ -248,7 +266,9 @@ fn normalize_perlin_map(width: usize, height: usize, period: usize) -> Vec<Vec<f
         )
         .reduce(
             || (f64::INFINITY, f64::NEG_INFINITY),
-            |(acc_min, acc_max), (next_min, next_max)| (acc_min.min(next_min), acc_max.max(next_max)),
+            |(acc_min, acc_max), (next_min, next_max)| {
+                (acc_min.min(next_min), acc_max.max(next_max))
+            },
         );
 
     let range = (max_val - min_val).max(f64::EPSILON);
@@ -301,7 +321,12 @@ fn shore_adjacent_water_coords(terrain_map: &Vec<Vec<f64>>, water_lvl: f64) -> V
         .collect()
 }
 
-fn gen_dist_ocean_map(terrain_map: &Vec<Vec<f64>>, width: usize, height: usize, water_lvl: f64) -> Vec<Vec<f64>> {
+fn gen_dist_ocean_map(
+    terrain_map: &Vec<Vec<f64>>,
+    width: usize,
+    height: usize,
+    water_lvl: f64,
+) -> Vec<Vec<f64>> {
     let mut dist_ocean_map = vec![vec![f64::INFINITY; width]; height];
     let mut queue = VecDeque::new();
 
@@ -332,8 +357,7 @@ fn gen_dist_ocean_map(terrain_map: &Vec<Vec<f64>>, width: usize, height: usize, 
     dist_ocean_map
 }
 
-
-// order: lower Φ first; then closer to ocean; then fixed cell index
+// order: lower Φ first; then closer to ocean
 pub type FlowRank = (f64, f64, usize);
 
 pub fn get_flow_rank(phi: f64, dist_ocean: f64, x: usize, y: usize, width: usize) -> FlowRank {
@@ -373,7 +397,7 @@ fn pick_upwind_land(
     terrain_map: &Vec<Vec<f64>>,
     water_lvl: f64,
 ) -> Option<(usize, usize)> {
-    // lower rank wins --> wind along neg gradient 
+    // lower rank wins --> wind along neg gradient
     let flow_rank = get_flow_rank(phi[y][x], ocean_dist_map[y][x], x, y, width);
     let mut best_choice: Option<(FlowRank, (usize, usize))> = None;
 
@@ -389,7 +413,13 @@ fn pick_upwind_land(
         }
 
         let neighbor_rank = get_flow_rank(phi[ny][nx], ocean_dist_map[ny][nx], nx, ny, width);
-        if neighbor_rank < flow_rank && best_choice.as_ref().map_or(true, |(curr_best_neighbor, _)| neighbor_rank < *curr_best_neighbor) {
+        if neighbor_rank < flow_rank
+            && best_choice
+                .as_ref()
+                .map_or(true, |(curr_best_neighbor, _)| {
+                    neighbor_rank < *curr_best_neighbor
+                })
+        {
             best_choice = Some((neighbor_rank, (nx, ny)));
         }
     }
@@ -429,54 +459,4 @@ pub fn gen_upwind_map(
                 .collect()
         })
         .collect()
-}
-
-pub fn gen_water_body_size(
-    width: usize,
-    height: usize,
-    terrain_map: &Vec<Vec<f64>>,
-    water_lvl: f64,
-) -> Vec<Vec<f64>> {
-    let mut water_body_size_map = vec![vec![0.0; width]; height];
-    let mut visited = vec![vec![false; width]; height];
-
-    for y in 0..height {
-        for x in 0..width {
-            if terrain_map[y][x] > water_lvl || visited[y][x] {
-                continue;
-            }
-
-            let mut queue = VecDeque::from([(x, y)]);
-            let mut component = Vec::new();
-            visited[y][x] = true;
-
-            while let Some((cx, cy)) = queue.pop_front() {
-                component.push((cx, cy));
-                for &(dx, dy) in &CARDINAL_DELTAS {
-                    let nx = cx as isize + dx;
-                    let ny = cy as isize + dy;
-                    if nx < 0 || ny < 0 {
-                        continue;
-                    }
-                    let (nx, ny) = (nx as usize, ny as usize);
-                    if nx >= width
-                        || ny >= height
-                        || terrain_map[ny][nx] > water_lvl
-                        || visited[ny][nx]
-                    {
-                        continue;
-                    }
-                    visited[ny][nx] = true;
-                    queue.push_back((nx, ny));
-                }
-            }
-
-            let size = component.len() as f64;
-            for (cx, cy) in component {
-                water_body_size_map[cy][cx] = size;
-            }
-        }
-    }
-
-    water_body_size_map
 }
