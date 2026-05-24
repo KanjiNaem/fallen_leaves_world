@@ -6,7 +6,6 @@
 
 use crate::{helpers, perlin_greyscale};
 use rayon::prelude::*;
-use std::collections::VecDeque;
 
 const BASE_MOISTURE_LEAK: f64 = 10.0;
 const HEIGHT_DIFF_MOISTURE_COEF: f64 = 1.5;
@@ -181,7 +180,7 @@ pub fn gen_moisture_from_flow_maps(
         .into_par_iter()
         .map(|y| {
             let start = y * width;
-            moisture_flat[start..start + width].to_vec()
+            moisture_flat[start..(start + width)].to_vec()
         })
         .collect()
 }
@@ -223,7 +222,7 @@ pub fn gen_flow_rank_maps(
 ) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let norm_perl = normalize_perlin_map(width, height, map_start_period * 4);
     let lambda = 0.2;
-    let ocean_dist_map = gen_dist_ocean_map(terrain_map, width, height, water_lvl);
+    let ocean_dist_map = helpers::gen_dist_ocean_map(terrain_map, width, height, water_lvl);
     let phi_current_map = gen_phi_current_map(
         terrain_map,
         width,
@@ -283,79 +282,6 @@ fn normalize_perlin_map(width: usize, height: usize, period: usize) -> Vec<Vec<f
 }
 
 const CARDINAL_DELTAS: [(isize, isize); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
-
-fn borders_land(
-    terrain_map: &Vec<Vec<f64>>,
-    water_lvl: f64,
-    width: usize,
-    height: usize,
-    x: usize,
-    y: usize,
-) -> bool {
-    CARDINAL_DELTAS.iter().any(|&(dx, dy)| {
-        let nx = x as isize + dx;
-        let ny = y as isize + dy;
-        if nx < 0 || ny < 0 {
-            return false;
-        }
-        let (nx, ny) = (nx as usize, ny as usize);
-        nx < width && ny < height && terrain_map[ny][nx] > water_lvl
-    })
-}
-
-fn shore_adjacent_water_coords(terrain_map: &Vec<Vec<f64>>, water_lvl: f64) -> Vec<(usize, usize)> {
-    let height = terrain_map.len();
-    let width = terrain_map[0].len();
-
-    terrain_map
-        .par_iter()
-        .enumerate()
-        .flat_map_iter(|(y, row)| {
-            (0..width).filter_map(move |x| {
-                if row[x] > water_lvl {
-                    return None;
-                }
-                borders_land(terrain_map, water_lvl, width, height, x, y).then_some((x, y))
-            })
-        })
-        .collect()
-}
-
-fn gen_dist_ocean_map(
-    terrain_map: &Vec<Vec<f64>>,
-    width: usize,
-    height: usize,
-    water_lvl: f64,
-) -> Vec<Vec<f64>> {
-    let mut dist_ocean_map = vec![vec![f64::INFINITY; width]; height];
-    let mut queue = VecDeque::new();
-
-    for &(x, y) in shore_adjacent_water_coords(terrain_map, water_lvl).iter() {
-        dist_ocean_map[y][x] = 0.0;
-        queue.push_back((x, y));
-    }
-
-    while let Some((x, y)) = queue.pop_front() {
-        let next_dist = dist_ocean_map[y][x] + 1.0;
-        for &(dx, dy) in &CARDINAL_DELTAS {
-            let nx = x as isize + dx;
-            let ny = y as isize + dy;
-            if nx < 0 || ny < 0 {
-                continue;
-            }
-            let (nx, ny) = (nx as usize, ny as usize);
-            if nx >= width || ny >= height {
-                continue;
-            }
-            if next_dist < dist_ocean_map[ny][nx] {
-                dist_ocean_map[ny][nx] = next_dist;
-                queue.push_back((nx, ny));
-            }
-        }
-    }
-
-    dist_ocean_map
-}
 
 // order: lower Φ first; then closer to ocean
 pub type FlowRank = (f64, f64, usize);
