@@ -1,5 +1,5 @@
 use crate::{
-    moisture_map, perlin_greyscale, smooth_terrain, wind_col_grad_and_local_moisture_map_old,
+    moisture_map, perlin_greyscale, smooth_terrain, wind_col_grad_and_local_rainfall_map_old,
 };
 pub struct WorldPipelineStepStruct {
     pub water_lvl: f64,
@@ -7,8 +7,8 @@ pub struct WorldPipelineStepStruct {
     pub smooth_noise: Vec<Vec<f64>>,
     pub wind_column_noise_base: Vec<Vec<f64>>,
     pub wind_column_gradient: Vec<Vec<Option<(usize, usize)>>>,
+    pub rainfall_map: Vec<Vec<f64>>,
     pub moisture_map: Vec<Vec<f64>>,
-    pub new_moisture_map: Vec<Vec<f64>>,
 }
 
 pub fn gen_world_pipeline_step_struct(
@@ -18,6 +18,7 @@ pub fn gen_world_pipeline_step_struct(
     octaves: usize,
     attenuation: f64,
     water_lvl: f64,
+    max_moisture: f64,
 ) -> WorldPipelineStepStruct {
     assert!(width == height);
 
@@ -47,7 +48,7 @@ pub fn gen_world_pipeline_step_struct(
     println!("done!");
 
     println!("generating flow maps");
-    let (ocean_dist_map, phi_map) = wind_col_grad_and_local_moisture_map_old::gen_flow_rank_maps(
+    let (ocean_dist_map, phi_map) = wind_col_grad_and_local_rainfall_map_old::gen_flow_rank_maps(
         width,
         height,
         &smooth_noise,
@@ -57,7 +58,7 @@ pub fn gen_world_pipeline_step_struct(
     println!("done!");
 
     println!("generating wind column gradient map");
-    let wind_column_gradient = wind_col_grad_and_local_moisture_map_old::gen_upwind_map(
+    let wind_column_gradient = wind_col_grad_and_local_rainfall_map_old::gen_upwind_map(
         width,
         height,
         &phi_map,
@@ -67,8 +68,8 @@ pub fn gen_world_pipeline_step_struct(
     );
     println!("done!");
 
-    println!("generating moisture map");
-    let moisture_map = wind_col_grad_and_local_moisture_map_old::gen_moisture_from_flow_maps(
+    println!("generating local rainfall map");
+    let rainfall_map = wind_col_grad_and_local_rainfall_map_old::gen_rainfall_from_flow_maps(
         width,
         height,
         &smooth_noise,
@@ -80,7 +81,8 @@ pub fn gen_world_pipeline_step_struct(
     println!("done!");
 
     println!("gen new moisture map");
-    let new_moisture_map = moisture_map::gen_moisture_map(width, height, &smooth_noise, water_lvl);
+    let moisture_map =
+        moisture_map::gen_moisture_map(width, height, &smooth_noise, water_lvl, max_moisture);
     println!("done!");
 
     WorldPipelineStepStruct {
@@ -89,7 +91,7 @@ pub fn gen_world_pipeline_step_struct(
         smooth_noise,
         wind_column_noise_base,
         wind_column_gradient,
+        rainfall_map,
         moisture_map,
-        new_moisture_map,
     }
 }

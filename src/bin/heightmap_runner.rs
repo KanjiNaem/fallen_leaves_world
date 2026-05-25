@@ -1,12 +1,22 @@
+#[allow(unused_imports)]
 use fallen_leaves_world::{heightmap_view, img_gen, world_gen_pipeline};
 
 #[kiss3d::main]
 async fn main() {
     let water_lvl = 220.0;
+    // higher max means proportionally more moisture needed to be considered very moist
+    let max_moisture = 400.0;
 
     // assume square maps only, panic otherwise for now
-    let pipeline =
-        world_gen_pipeline::gen_world_pipeline_step_struct(2000, 2000, 500, 8, 0.7, water_lvl);
+    let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
+        2000,
+        2000,
+        500,
+        8,
+        0.7,
+        water_lvl,
+        max_moisture,
+    );
 
     img_gen::gen_greyscale_img_from_vec(&pipeline.noise_base, format!("grey_pre_water_pass.png"));
 
@@ -40,20 +50,21 @@ async fn main() {
         format!("local_wind_upwind_arrows.png"),
     );
 
-    img_gen::gen_rainfall_map_img(
+    img_gen::gen_local_flow_rainfall_map_img(
+        &pipeline.rainfall_map,
+        &pipeline.smooth_noise,
+        water_lvl,
+        &img_gen::LandElevationPalette::default(),
+        format!("local_rainfall_map.png"),
+    );
+
+    img_gen::gen_moisture_map_img(
         &pipeline.moisture_map,
         &pipeline.smooth_noise,
         water_lvl,
+        max_moisture,
         &img_gen::LandElevationPalette::default(),
-        format!("local_moisture_map.png"),
-    );
-
-    img_gen::gen_rainfall_map_img(
-        &pipeline.new_moisture_map,
-        &pipeline.smooth_noise,
-        water_lvl,
-        &img_gen::LandElevationPalette::default(),
-        format!("new_moisture_map.png"),
+        format!("moisture_map.png"),
     );
 
     // heightmap_view::view_heightmap(

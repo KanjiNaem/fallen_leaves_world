@@ -124,6 +124,58 @@ impl LandElevationPalette {
     }
 }
 
+const FLOW_MOISTURE_OVERLAY_MIN: f64 = 0.42;
+const FLOW_MOISTURE_OVERLAY_MAX: f64 = 0.78;
+
+/// Tan → cyan → pale blue ramp used for flow-based local moisture (mountain rainfall).
+fn flow_moisture_color(t: f64) -> Rgb<u8> {
+    const DRY_LAND: Rgb<u8> = Rgb([168, 145, 98]);
+    const WET_LOW: Rgb<u8> = Rgb([55, 145, 175]);
+    const WET_HIGH: Rgb<u8> = Rgb([235, 245, 255]);
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        let u = t / 0.5;
+        Rgb([
+            lerp_channel(DRY_LAND.0[0] as f64, WET_LOW.0[0] as f64, u),
+            lerp_channel(DRY_LAND.0[1] as f64, WET_LOW.0[1] as f64, u),
+            lerp_channel(DRY_LAND.0[2] as f64, WET_LOW.0[2] as f64, u),
+        ])
+    } else {
+        let u = (t - 0.5) / 0.5;
+        Rgb([
+            lerp_channel(WET_LOW.0[0] as f64, WET_HIGH.0[0] as f64, u),
+            lerp_channel(WET_LOW.0[1] as f64, WET_HIGH.0[1] as f64, u),
+            lerp_channel(WET_LOW.0[2] as f64, WET_HIGH.0[2] as f64, u),
+        ])
+    }
+}
+
+/// Moisture ramp: pale blue (dry) through saturated blues to red at `t == 1.0` (max moisture).
+fn moisture_color(t: f64) -> Rgb<u8> {
+    let t = t.clamp(0.0, 1.0);
+    let stops: [(f64, [f64; 3]); 5] = [
+        (0.0, [255.0, 255.0, 255.0]),
+        (0.2, [175.0, 215.0, 250.0]),
+        (0.45, [100.0, 170.0, 230.0]),
+        (0.7, [45.0, 115.0, 195.0]),
+        (1.0, [255.0, 0.0, 0.0]),
+    ];
+
+    let mut i = 0usize;
+    while i + 1 < stops.len() && t > stops[i + 1].0 {
+        i += 1;
+    }
+    let (t0, c0) = stops[i];
+    let (t1, c1) = stops[i + 1];
+    let span = (t1 - t0).max(1e-9);
+    let u = ((t - t0) / span).clamp(0.0, 1.0);
+    Rgb([
+        lerp_channel(c0[0], c1[0], u),
+        lerp_channel(c0[1], c1[1], u),
+        lerp_channel(c0[2], c1[2], u),
+    ])
+}
+
 pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) {
     let grid_h = noise_vec.len();
     let grid_w = noise_vec[0].len();
@@ -148,7 +200,9 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) 
     println!("saved to {}", out_path.display());
 }
 
-pub fn gen_rainfall_map_img(
+/// Flow-based local moisture (upwind / mountain rainfall). Uses the legacy tan→blue
+/// gradient normalized to the map's peak deposit so elevation-driven highs read clearly.
+pub fn gen_local_flow_rainfall_map_img(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
     water_level: f64,
@@ -157,17 +211,13 @@ pub fn gen_rainfall_map_img(
 ) {
     let grid_h = rainfall.len();
     let grid_w = rainfall[0].len();
-    let dry_land = Rgb([168u8, 145, 98]);
-    let wet_low = Rgb([55u8, 145, 175]);
-    let wet_high = Rgb([235u8, 245, 255]);
 
     let (min_val, _, range) = min_max_range_2d(terrain);
     let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
     let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
 
-    let rain_scale = 22.0f64;
-    const MOISTURE_OVERLAY_MIN: f64 = 0.42;
-    const MOISTURE_OVERLAY_MAX: f64 = 0.78;
+    let (_, rain_peak, _) = min_max_range_2d(rainfall);
+    let rain_scale = rain_peak.max(1.0);
 
     let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
 
@@ -188,24 +238,72 @@ pub fn gen_rainfall_map_img(
                 elevation_color
             } else {
                 let t = (rainfall[y][x] / rain_scale).clamp(0.0, 1.0);
-                let moisture_color = if t < 0.5 {
-                    let u = t / 0.5;
-                    Rgb([
-                        lerp_channel(dry_land.0[0] as f64, wet_low.0[0] as f64, u),
-                        lerp_channel(dry_land.0[1] as f64, wet_low.0[1] as f64, u),
-                        lerp_channel(dry_land.0[2] as f64, wet_low.0[2] as f64, u),
-                    ])
+                let tint = flow_moisture_color(t);
+                let overlay = FLOW_MOISTURE_OVERLAY_MIN
+                    + t * (FLOW_MOISTURE_OVERLAY_MAX - FLOW_MOISTURE_OVERLAY_MIN);
+                blend_rgb(elevation_color, tint, overlay)
+            };
+
+            img.put_pixel(x as u32, y as u32, px_color);
+        }
+    }
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
+    let out_path = out_dir.join(file_name);
+    img.save(&out_path).unwrap();
+
+    println!("saved to {}", out_path.display());
+}
+
+/// Renders land moisture over terrain. `max_moisture` is cell capacity (0..=max);
+/// color/overlay use `stored / max_moisture` so higher caps need more stored moisture to reach red.
+pub fn gen_moisture_map_img(
+    rainfall: &Vec<Vec<f64>>,
+    terrain: &Vec<Vec<f64>>,
+    water_level: f64,
+    max_moisture: f64,
+    land_palette: &LandElevationPalette,
+    file_name: String,
+) {
+    let grid_h = rainfall.len();
+    let grid_w = rainfall[0].len();
+
+    let (min_val, _, range) = min_max_range_2d(terrain);
+    let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
+    let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
+
+    let moisture_denom = if max_moisture > f64::EPSILON {
+        max_moisture
+    } else {
+        1.0
+    };
+
+    let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
+
+    for y in 0..grid_h {
+        for x in 0..grid_w {
+            let elevation_color = terrain_elevation_color(
+                terrain,
+                x,
+                y,
+                min_val,
+                range,
+                norm_water_lvl,
+                land_denom,
+                land_palette,
+            );
+
+            let px_color = if terrain[y][x] <= water_level {
+                elevation_color
+            } else {
+                let moisture_t = (rainfall[y][x] / moisture_denom).clamp(0.0, 1.0);
+                if moisture_t <= 0.0 {
+                    elevation_color
                 } else {
-                    let u = (t - 0.5) / 0.5;
-                    Rgb([
-                        lerp_channel(wet_low.0[0] as f64, wet_high.0[0] as f64, u),
-                        lerp_channel(wet_low.0[1] as f64, wet_high.0[1] as f64, u),
-                        lerp_channel(wet_low.0[2] as f64, wet_high.0[2] as f64, u),
-                    ])
-                };
-                let overlay =
-                    MOISTURE_OVERLAY_MIN + t * (MOISTURE_OVERLAY_MAX - MOISTURE_OVERLAY_MIN);
-                blend_rgb(elevation_color, moisture_color, overlay)
+                    let tint = moisture_color(moisture_t);
+                    blend_rgb(elevation_color, tint, moisture_t)
+                }
             };
 
             img.put_pixel(x as u32, y as u32, px_color);
