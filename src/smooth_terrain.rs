@@ -1,7 +1,5 @@
 use rayon::prelude::*;
 
-use crate::helpers;
-
 /// hermite post clamp interp.
 #[inline]
 fn smoothstep(edge_left: f64, edge_right: f64, x: f64) -> f64 {

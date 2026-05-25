@@ -203,7 +203,8 @@ pub fn gen_rainfall_map_img(
                         lerp_channel(wet_low.0[2] as f64, wet_high.0[2] as f64, u),
                     ])
                 };
-                let overlay = MOISTURE_OVERLAY_MIN + t * (MOISTURE_OVERLAY_MAX - MOISTURE_OVERLAY_MIN);
+                let overlay =
+                    MOISTURE_OVERLAY_MIN + t * (MOISTURE_OVERLAY_MAX - MOISTURE_OVERLAY_MIN);
                 blend_rgb(elevation_color, moisture_color, overlay)
             };
 
@@ -329,8 +330,24 @@ fn draw_flow_arrow(
     let back_x = tip_x - ux * head_len;
     let back_y = tip_y - uy * head_len;
     let wing = head_len;
-    draw_thick_line_rgb(img, tip_x, tip_y, back_x + px * wing, back_y + py * wing, stroke, color);
-    draw_thick_line_rgb(img, tip_x, tip_y, back_x - px * wing, back_y - py * wing, stroke, color);
+    draw_thick_line_rgb(
+        img,
+        tip_x,
+        tip_y,
+        back_x + px * wing,
+        back_y + py * wing,
+        stroke,
+        color,
+    );
+    draw_thick_line_rgb(
+        img,
+        tip_x,
+        tip_y,
+        back_x - px * wing,
+        back_y - py * wing,
+        stroke,
+        color,
+    );
 }
 
 pub fn gen_upwind_sparse_arrow_img(
@@ -382,15 +399,7 @@ pub fn gen_upwind_sparse_arrow_img(
             const STROKE: i32 = 2;
             const HEAD_LEN: i32 = 6;
             draw_flow_arrow(
-                &mut img,
-                x as i32,
-                y as i32,
-                ux,
-                uy,
-                SHAFT_LEN,
-                STROKE,
-                HEAD_LEN,
-                arrow,
+                &mut img, x as i32, y as i32, ux, uy, SHAFT_LEN, STROKE, HEAD_LEN, arrow,
             );
         }
     }

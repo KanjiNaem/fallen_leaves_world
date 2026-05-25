@@ -1,14 +1,95 @@
-use rayon::prelude::*;
-
 use crate::helpers;
 
-pub fn gen_moisture_map(width: usize, height: usize, terrain_map: Vec<Vec<f64>>, water_lvl: f64) -> Vec<Vec<f64>> {
-
+// non directional rainfall, manhattan dist based moisture radius around water bodies
+// base moisture 100 regardless of size
+pub fn gen_moisture_map(
+    width: usize,
+    height: usize,
+    terrain_map: &Vec<Vec<f64>>,
+    water_lvl: f64,
+) -> Vec<Vec<f64>> {
+    let base_moisture = 100.0;
+    let limit_moisture = 5000.0;
+    let mut moisture_map: Vec<Vec<f64>> = vec![vec![0.0; width]; height];
     let water_body_groups = helpers::group_water_bodies(width, height, &terrain_map, water_lvl);
-    let water_body_group_sizes = helpers::water_body_group_size(water_body_groups);
 
-    
+    for (_, curr_group) in &water_body_groups {
+        let curr_size = curr_group.len();
+        if curr_size <= 10 {
+            continue;
+        }
 
+        println!("curr size: {}", curr_size);
+        println!("world size: {}", height * width);
+        let infl_rad = get_influence_radius(width, height, curr_size);
+        let curr_shore =
+            helpers::get_shore_adj_for_body(width, height, curr_group, &terrain_map, water_lvl);
 
-    return vec![vec![0.0; 1]; 1];
+        if curr_shore.is_empty() {
+            continue;
+        }
+
+        let (dist_map, min_x, min_y) =
+            helpers::gen_manhattan_dist_to_shore(width, height, &curr_shore, infl_rad);
+        let max_x = min_x + dist_map[0].len() - 1;
+        let max_y = min_y + dist_map.len() - 1;
+
+        for y in min_y..=max_y {
+            let dist_row = &dist_map[y - min_y];
+            let terrain_row = &terrain_map[y];
+            let moist_row = &mut moisture_map[y];
+
+            for x in min_x..=max_x {
+                if terrain_row[x] <= water_lvl {
+                    continue;
+                }
+
+                let curr_rad = dist_row[x - min_x];
+                if curr_rad >= infl_rad {
+                    continue;
+                }
+
+                let curr_percentile =
+                    get_influence_moisture_percentile(curr_rad as f64, infl_rad as f64);
+                moist_row[x] = (curr_percentile * base_moisture).max(limit_moisture);
+            }
+        }
+    }
+
+    return moisture_map;
+}
+
+fn get_influence_radius(width: usize, height: usize, water_body_size: usize) -> usize {
+    let map_size = width * height;
+    if water_body_size >= map_size / 4 {
+        // println!("1");
+        return width;
+    } else if water_body_size >= map_size / 40 {
+        // println!("2");
+        return width / 2;
+    } else if water_body_size >= map_size / 80 {
+        // println!("6");
+        return width / 6;
+    } else {
+        // println!("12");
+        return width / 12;
+    }
+
+    // return width / 8;
+}
+
+fn get_influence_moisture_percentile(curr_rad: f64, total_rad: f64) -> f64 {
+    if curr_rad <= total_rad / 4.0 {
+        return 1.0;
+    } else if curr_rad <= total_rad / 3.0 {
+        return 0.75;
+    } else if curr_rad <= total_rad / 2.0 {
+        return 0.5;
+    } else if curr_rad <= total_rad / 1.5 {
+        return 0.25;
+    } else if curr_rad >= total_rad / 1.25 {
+        return 0.15;
+    } else {
+        return 0.0;
+    }
 }

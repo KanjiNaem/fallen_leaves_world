@@ -1,4 +1,5 @@
-use rayon::{prelude::*, result};
+use fxhash::FxHashMap;
+use rayon::prelude::*;
 use std::collections::VecDeque;
 
 const CARDINAL_DELTAS: [(isize, isize); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
@@ -53,7 +54,10 @@ pub fn gen_water_body_size(
     water_body_size_map
 }
 
-pub fn shore_adjacent_water_coords(terrain_map: &Vec<Vec<f64>>, water_lvl: f64) -> Vec<(usize, usize)> {
+pub fn shore_adjacent_water_coords(
+    terrain_map: &Vec<Vec<f64>>,
+    water_lvl: f64,
+) -> Vec<(usize, usize)> {
     let height = terrain_map.len();
     let width = terrain_map[0].len();
 
@@ -131,12 +135,11 @@ pub fn group_water_bodies(
     height: usize,
     terrain_map: &Vec<Vec<f64>>,
     water_lvl: f64,
-) -> Vec<(i32, usize, usize)> {
-    let mut water_body_groups = Vec::new();
+) -> FxHashMap<i32, Vec<(usize, usize)>> {
+    let mut water_body_groups: FxHashMap<i32, Vec<(usize, usize)>> = FxHashMap::default();
     let mut visited = vec![vec![false; width]; height];
     let mut group_id: i32 = 0;
 
-    
     for y in 0..height {
         for x in 0..width {
             if terrain_map[y][x] > water_lvl || visited[y][x] {
@@ -144,11 +147,11 @@ pub fn group_water_bodies(
             }
 
             let mut queue = VecDeque::from([(x, y)]);
+            let mut curr_group: Vec<(usize, usize)> = Vec::new();
             visited[y][x] = true;
 
             while let Some((curr_x, curr_y)) = queue.pop_front() {
-                water_body_groups.push((group_id, curr_x, curr_y));
-
+                curr_group.push((curr_x, curr_y));
                 for &(c_x, c_y) in &CARDINAL_DELTAS {
                     let next_x = curr_x as isize + c_x;
                     let next_y = curr_y as isize + c_y;
@@ -168,7 +171,7 @@ pub fn group_water_bodies(
                     queue.push_back((next_x, next_y));
                 }
             }
-
+            water_body_groups.insert(group_id, curr_group);
             group_id += 1;
         }
     }
@@ -176,28 +179,93 @@ pub fn group_water_bodies(
     water_body_groups
 }
 
-pub fn water_body_group_size(mut water_body_groups: Vec<(i32, usize, usize)>) -> Vec<(i32, usize)> {
-    
-    let mut result_sizes: Vec<(i32, usize)> = Vec::new();
-    if water_body_groups.len() == 0 {
-        return result_sizes;
-    }
+pub fn water_body_group_size(
+    water_body_groups: &FxHashMap<i32, Vec<(usize, usize)>>,
+) -> FxHashMap<i32, usize> {
+    water_body_groups
+        .iter()
+        .map(|(group_id, group_members)| (*group_id, group_members.len()))
+        .collect()
+}
 
-    water_body_groups.sort_by_key(|tup| tup.0);
-    let mut curr_group = water_body_groups[0].0;
-    let mut curr_group_size = 0;
-    
-    for curr_cell in water_body_groups.iter() {
-        if curr_cell.0 == curr_group {
-            curr_group_size += 1;
-            continue;
+pub fn get_shore_adj_for_body(
+    width: usize,
+    height: usize,
+    body: &Vec<(usize, usize)>,
+    terrain_map: &Vec<Vec<f64>>,
+    water_lvl: f64,
+) -> Vec<(usize, usize)> {
+    body.iter()
+        .copied()
+        .filter(|&(x, y)| {
+            terrain_map[y][x] <= water_lvl
+                && borders_land(terrain_map, water_lvl, width, height, x, y)
+        })
+        .collect()
+}
+
+const MANHATTAN_DIST_INF: usize = usize::MAX / 4;
+
+fn manhattan_dist_pass(grid: &mut Vec<Vec<usize>>) {
+    let height = grid.len();
+    let width = grid[0].len();
+
+    for y in 0..height {
+        for x in 1..width {
+            grid[y][x] = grid[y][x].min(grid[y][x - 1].saturating_add(1));
         }
-
-        result_sizes.push((curr_group, curr_group_size));
-        curr_group_size = 1;
-        curr_group = curr_cell.0;
+        for x in (0..width - 1).rev() {
+            grid[y][x] = grid[y][x].min(grid[y][x + 1].saturating_add(1));
+        }
     }
 
-    result_sizes.push((curr_group, curr_group_size));
-    result_sizes
+    for x in 0..width {
+        for y in 1..height {
+            grid[y][x] = grid[y][x].min(grid[y - 1][x].saturating_add(1));
+        }
+        for y in (0..height - 1).rev() {
+            grid[y][x] = grid[y][x].min(grid[y + 1][x].saturating_add(1));
+        }
+    }
+}
+
+// L1 dist to nearest shore tile; cropped to shore bbox + infl_rad
+pub fn gen_manhattan_dist_to_shore(
+    width: usize,
+    height: usize,
+    shore: &[(usize, usize)],
+    infl_rad: usize,
+) -> (Vec<Vec<usize>>, usize, usize) {
+    if shore.is_empty() {
+        return (Vec::new(), 0, 0);
+    }
+
+    let mut min_x = width;
+    let mut max_x = 0;
+    let mut min_y = height;
+    let mut max_y = 0;
+
+    for &(x, y) in shore {
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+
+    min_x = min_x.saturating_sub(infl_rad);
+    max_x = (max_x + infl_rad).min(width - 1);
+    min_y = min_y.saturating_sub(infl_rad);
+    max_y = (max_y + infl_rad).min(height - 1);
+
+    let sub_w = max_x - min_x + 1;
+    let sub_h = max_y - min_y + 1;
+    let mut grid = vec![vec![MANHATTAN_DIST_INF; sub_w]; sub_h];
+
+    for &(x, y) in shore {
+        grid[y - min_y][x - min_x] = 0;
+    }
+
+    manhattan_dist_pass(&mut grid);
+
+    return (grid, min_x, min_y);
 }
