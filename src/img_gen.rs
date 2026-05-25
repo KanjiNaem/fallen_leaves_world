@@ -22,6 +22,32 @@ fn min_max_range_2d(noise_vec: &Vec<Vec<f64>>) -> (f64, f64, f64) {
     (min_val, max_val, range)
 }
 
+/// High percentile of positive rainfall on land — stable display scale when a few peaks spike.
+fn land_rainfall_display_scale(
+    rainfall: &Vec<Vec<f64>>,
+    terrain: &Vec<Vec<f64>>,
+    water_level: f64,
+) -> f64 {
+    let mut values: Vec<f64> = Vec::new();
+    for y in 0..rainfall.len() {
+        for x in 0..rainfall[0].len() {
+            if terrain[y][x] <= water_level {
+                continue;
+            }
+            let v = rainfall[y][x];
+            if v > 0.0 {
+                values.push(v);
+            }
+        }
+    }
+    if values.is_empty() {
+        return 1.0;
+    }
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let idx = ((values.len() - 1) as f64 * 0.98).round() as usize;
+    values[idx].max(1.0)
+}
+
 #[inline]
 fn lerp_channel(a: f64, b: f64, t: f64) -> u8 {
     (a + (b - a) * t).round().clamp(0.0, 255.0) as u8
@@ -200,8 +226,6 @@ pub fn gen_greyscale_img_from_vec(noise_vec: &Vec<Vec<f64>>, file_name: String) 
     println!("saved to {}", out_path.display());
 }
 
-/// Flow-based local moisture (upwind / mountain rainfall). Uses the legacy tan→blue
-/// gradient normalized to the map's peak deposit so elevation-driven highs read clearly.
 pub fn gen_local_flow_rainfall_map_img(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
@@ -216,8 +240,7 @@ pub fn gen_local_flow_rainfall_map_img(
     let norm_water_lvl = ((water_level - min_val) / range).clamp(0.0, 1.0);
     let land_denom = (1.0 - norm_water_lvl).max(f64::EPSILON);
 
-    let (_, rain_peak, _) = min_max_range_2d(rainfall);
-    let rain_scale = rain_peak.max(1.0);
+    let rain_scale = land_rainfall_display_scale(rainfall, terrain, water_level);
 
     let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
 

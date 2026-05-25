@@ -8,7 +8,7 @@ use crate::{helpers, perlin_greyscale};
 use rayon::prelude::*;
 
 const BASE_RAINFALL_LEAK: f64 = 10.0;
-const HEIGHT_DIFF_RAINFALL_COEF: f64 = 1.5;
+const HEIGHT_DIFF_RAINFALL_COEF: f64 = 2.0;
 
 fn rainfall_potential_from_body_size(body_size: f64, map_area: f64) -> f64 {
     let frac = body_size / map_area;
@@ -61,18 +61,33 @@ fn adjacent_water_rainfall_potential(
         .fold(0.0, f64::max)
 }
 
-fn land_rainfall_demand(
+// positive elevation step along upwind -> downwind edge
+fn upslope_height_diff(
     terrain_map: &Vec<Vec<f64>>,
     water_lvl: f64,
     x: usize,
     y: usize,
     upwind: Option<(usize, usize)>,
 ) -> f64 {
-    let height_diff = match upwind {
+    match upwind {
         Some((px, py)) => (terrain_map[y][x] - terrain_map[py][px]).max(0.0),
         None => (terrain_map[y][x] - water_lvl).max(0.0),
-    };
-    BASE_RAINFALL_LEAK + height_diff * HEIGHT_DIFF_RAINFALL_COEF
+    }
+}
+
+fn slope_rainfall_lift(height_diff: f64) -> f64 {
+    height_diff.max(0.0) * HEIGHT_DIFF_RAINFALL_COEF
+}
+
+fn base_rainfall_deposit(available: f64) -> f64 {
+    BASE_RAINFALL_LEAK.min(available.max(0.0))
+}
+
+fn slope_rainfall_deposit(slope_lift: f64, remaining_after_base: f64) -> f64 {
+    if slope_lift <= 0.0 {
+        return 0.0;
+    }
+    slope_lift.min(remaining_after_base.max(0.0))
 }
 
 #[inline]
@@ -161,19 +176,24 @@ pub fn gen_rainfall_from_flow_maps(
 
     for (x, y, parent) in land_cells {
         let i = cell_index(x, y, width);
-        let incoming_rainfall = match parent {
+        let height_diff = upslope_height_diff(terrain_map, water_lvl, x, y, parent);
+
+        let incoming_base = match parent {
             Some((px, py)) => stream_potential[cell_index(px, py, width)],
             None => coastal_source[i],
         };
+        let slope_lift = slope_rainfall_lift(height_diff);
+        let available_rainfall = incoming_base + slope_lift;
 
-        if incoming_rainfall <= 0.0 {
+        if available_rainfall <= 0.0 {
             continue;
         }
 
-        let rainfall_demand = land_rainfall_demand(terrain_map, water_lvl, x, y, parent);
-        let rainfall_deposited = rainfall_demand.min(incoming_rainfall);
+        let base_part = base_rainfall_deposit(available_rainfall);
+        let slope_part = slope_rainfall_deposit(slope_lift, available_rainfall - base_part);
+        let rainfall_deposited = base_part + slope_part;
         rainfall_flat[i] = rainfall_deposited;
-        stream_potential[i] = incoming_rainfall - rainfall_deposited;
+        stream_potential[i] = available_rainfall - rainfall_deposited;
     }
 
     (0..height)
