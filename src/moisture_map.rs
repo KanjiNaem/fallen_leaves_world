@@ -1,6 +1,7 @@
 use crate::helpers;
 
 use rayon::prelude::*;
+use std::sync::Mutex;
 
 // non directional rainfall, manhattan dist based moisture radius around water bodies
 // base moisture 100 regardless of size
@@ -12,23 +13,23 @@ pub fn gen_moisture_map(
     max_moisture: f64,
 ) -> Vec<Vec<f64>> {
     let base_moisture = 100.0;
-    let mut moisture_map: Vec<Vec<f64>> = vec![vec![0.0; width]; height];
+    let map_len = width * height;
+    let mut terrain_flat = Vec::with_capacity(map_len);
+    for row in terrain_map {
+        terrain_flat.extend_from_slice(row);
+    }
     let water_body_groups = helpers::group_water_bodies(width, height, &terrain_map, water_lvl);
 
-    // println!("world size: {}", height * width);
-    for (_, curr_group) in &water_body_groups {
-        let curr_size = curr_group.len();
-        // if curr_size <= 10 {
-        //     continue;
-        // }
+    let deposit_sum = Mutex::new(vec![0.0f64; map_len]);
 
-        println!("curr size: {}", curr_size);
+    water_body_groups.par_iter().for_each(|(_, curr_group)| {
+        let curr_size = curr_group.len();
         let infl_rad = get_influence_radius(width, height, curr_size);
         let curr_shore =
             helpers::get_shore_adj_for_body(width, height, curr_group, &terrain_map, water_lvl);
 
         if curr_shore.is_empty() {
-            continue;
+            return;
         }
 
         let (dist_map, min_x, min_y) =
@@ -36,28 +37,53 @@ pub fn gen_moisture_map(
         let max_x = min_x + dist_map[0].len() - 1;
         let max_y = min_y + dist_map.len() - 1;
 
-        for y in min_y..=max_y {
-            let dist_row = &dist_map[y - min_y];
-            let terrain_row = &terrain_map[y];
-            let moist_row = &mut moisture_map[y];
+        let updates: Vec<(usize, f64)> = (min_y..=max_y)
+            .into_par_iter()
+            .flat_map(|y| {
+                let dist_row = &dist_map[y - min_y];
+                let row_off = y * width;
+                let terrain_row = &terrain_flat[row_off..(row_off + width)];
+                (min_x..=max_x)
+                    .filter_map(|x| {
+                        if terrain_row[x] <= water_lvl {
+                            return None;
+                        }
 
-            for x in min_x..=max_x {
-                if terrain_row[x] <= water_lvl {
-                    continue;
-                }
+                        let curr_rad = dist_row[x - min_x];
+                        if curr_rad >= infl_rad {
+                            return None;
+                        }
 
-                let curr_rad = dist_row[x - min_x];
-                if curr_rad >= infl_rad {
-                    continue;
-                }
+                        let curr_percentile =
+                            get_influence_moisture_percentile(curr_rad as f64, infl_rad as f64);
+                        let deposit = curr_percentile * base_moisture;
+                        // if deposit <= 0.0 {
+                        //     return None;
+                        // }
 
-                let curr_percentile =
-                    get_influence_moisture_percentile(curr_rad as f64, infl_rad as f64);
-                let deposit = curr_percentile * base_moisture;
-                moist_row[x] = (moist_row[x] + deposit).min(max_moisture);
-            }
+                        Some((row_off + x, deposit))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let mut sum_guard = deposit_sum.lock().unwrap();
+        for (idx, deposit) in updates {
+            sum_guard[idx] += deposit;
         }
-    }
+    });
+
+    let moisture_flat: Vec<f64> = deposit_sum
+        .into_inner()
+        .unwrap()
+        .into_iter()
+        .map(|s| s.min(max_moisture))
+        .collect();
+
+    let moisture_map: Vec<Vec<f64>> = moisture_flat
+        .chunks_exact(width)
+        .map(|row| row.to_vec())
+        .collect();
 
     return moisture_map;
 }
@@ -86,6 +112,7 @@ fn get_influence_radius(width: usize, height: usize, water_body_size: usize) -> 
 }
 
 fn get_influence_moisture_percentile(curr_rad: f64, total_rad: f64) -> f64 {
+
     if curr_rad <= total_rad / 4.0 {
         return 1.0;
     } else if curr_rad <= total_rad / 3.0 {
@@ -97,6 +124,6 @@ fn get_influence_moisture_percentile(curr_rad: f64, total_rad: f64) -> f64 {
     } else if curr_rad <= total_rad / 1.25 {
         return 0.15;
     } else {
-        return 0.0;
+        return 0.1;
     }
 }
