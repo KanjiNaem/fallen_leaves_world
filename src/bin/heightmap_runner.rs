@@ -11,6 +11,7 @@ async fn main() {
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
         2000,
         2000,
+        500.0,
         500,
         8,
         0.7,
@@ -20,21 +21,21 @@ async fn main() {
 
     img_gen::gen_greyscale_img_from_vec(&pipeline.noise_base, format!("grey_pre_water_pass.png"));
 
-    img_gen::gen_grey_with_waterlvl_highlighted(
+    img_gen::gen_perlin_rgb_with_water(
         &pipeline.noise_base,
         water_lvl,
         &img_gen::LandElevationPalette::default(),
         format!("normal.png"),
     );
 
-    img_gen::gen_grey_with_waterlvl_highlighted(
+    img_gen::gen_perlin_rgb_with_water(
         &pipeline.smooth_noise,
         water_lvl,
         &img_gen::LandElevationPalette::default(),
         format!("smooth.png"),
     );
 
-    img_gen::gen_grey_with_waterlvl_highlighted(
+    img_gen::gen_perlin_rgb_with_water(
         &pipeline.wind_column_noise_base,
         0.0,
         &img_gen::LandElevationPalette::default(),
@@ -66,6 +67,10 @@ async fn main() {
         &img_gen::LandElevationPalette::default(),
         format!("moisture_map.png"),
     );
+
+    img_gen::gen_perlin_rgb(&pipeline.magic_influence_map, &img_gen::LandElevationPalette::default(), format!{"magic_influence_map.png"});
+
+    img_gen::gen_perlin_rgb(&pipeline.chaos_influence_map, &img_gen::LandElevationPalette::default(), format!{"chaos_influence_map.png"});
 
     // heightmap_view::view_heightmap(
     //     &pipeline.smooth_noise,

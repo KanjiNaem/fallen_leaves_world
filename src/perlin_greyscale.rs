@@ -89,6 +89,7 @@ fn get_perlin_value(x: usize, y: usize, perlin_vectors: &Vec<Vec<Vec2d>>, period
 pub fn gen_single_layer_perlin_greyscale(
     width: usize,
     height: usize,
+    map_z_axis: f64,
     period: usize,
 ) -> Vec<Vec<f64>> {
     assert!(period >= 1);
@@ -108,7 +109,7 @@ pub fn gen_single_layer_perlin_greyscale(
         .for_each(|(y, row)| {
             for x in 0..width {
                 let perlin_value = get_perlin_value(x, y, &perlin_vectors, period);
-                row[x] = 255.0 + 255.0 * perlin_value;
+                row[x] = map_z_axis * perlin_value;
             }
         });
 

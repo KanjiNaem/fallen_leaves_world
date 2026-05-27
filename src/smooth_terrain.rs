@@ -21,7 +21,7 @@ pub const SUGGEST_MIN_BAND: f64 = 2.0;
 
 pub fn smooth_at_lvl(
     noise_map: &Vec<Vec<f64>>,
-    water_lvl: f64,
+    smooth_at_lvl: f64,
     band_span_fraction: f64,
     keep_orig_power: f64,
     min_band: f64,
@@ -44,9 +44,9 @@ pub fn smooth_at_lvl(
         .map(|row| {
             row.into_iter()
                 .map(|noise_lvl| {
-                    let band_depth = ((noise_lvl - water_lvl).abs() / band).clamp(0.0, 1.0);
+                    let band_depth = ((noise_lvl - smooth_at_lvl).abs() / band).clamp(0.0, 1.0);
                     let keep_orig_dif = smoothstep(0.0, 1.0, band_depth).powf(power);
-                    water_lvl + (noise_lvl - water_lvl) * keep_orig_dif
+                    smooth_at_lvl + (noise_lvl - smooth_at_lvl) * keep_orig_dif
                 })
                 .collect()
         })

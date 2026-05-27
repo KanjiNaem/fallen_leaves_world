@@ -7,3 +7,5 @@ pub mod perlin_greyscale;
 pub mod smooth_terrain;
 pub mod wind_col_grad_and_local_rainfall_map_old;
 pub mod world_gen_pipeline;
+pub mod magic_influence_map;
+pub mod chaos_influence_map;

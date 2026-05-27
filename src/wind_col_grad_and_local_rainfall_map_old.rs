@@ -208,12 +208,13 @@ pub fn gen_rainfall_from_flow_maps(
 pub fn gen_rainfall_map(
     width: usize,
     height: usize,
+    map_z_axis: f64,
     terrain_map: &Vec<Vec<f64>>,
     water_lvl: f64,
     map_start_period: usize,
 ) -> Vec<Vec<f64>> {
     let (ocean_dist_map, phi_map) =
-        gen_flow_rank_maps(width, height, terrain_map, map_start_period, water_lvl);
+        gen_flow_rank_maps(width, height, map_z_axis, terrain_map, map_start_period, water_lvl);
     let upwind_neighbor_map = gen_upwind_map(
         width,
         height,
@@ -236,11 +237,12 @@ pub fn gen_rainfall_map(
 pub fn gen_flow_rank_maps(
     width: usize,
     height: usize,
+    map_z_axis: f64,
     terrain_map: &Vec<Vec<f64>>,
     map_start_period: usize,
     water_lvl: f64,
 ) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
-    let norm_perl = normalize_perlin_map(width, height, map_start_period * 4);
+    let norm_perl = normalize_perlin_map(width, height, map_z_axis, map_start_period * 4);
     let lambda = 0.2;
     let ocean_dist_map = helpers::gen_dist_ocean_map(terrain_map, width, height, water_lvl);
     let phi_current_map = gen_phi_current_map(
@@ -258,12 +260,13 @@ pub fn gen_flow_rank_maps(
 pub fn gen_wind_column_gradient_map(
     width: usize,
     height: usize,
+    map_z_axis: f64,
     terrain_map: &Vec<Vec<f64>>,
     map_start_period: usize,
     water_lvl: f64,
 ) -> Vec<Vec<Option<(usize, usize)>>> {
     let (ocean_dist_map, phi_current_map) =
-        gen_flow_rank_maps(width, height, terrain_map, map_start_period, water_lvl);
+        gen_flow_rank_maps(width, height, map_z_axis, terrain_map, map_start_period, water_lvl);
     gen_upwind_map(
         width,
         height,
@@ -274,8 +277,8 @@ pub fn gen_wind_column_gradient_map(
     )
 }
 
-fn normalize_perlin_map(width: usize, height: usize, period: usize) -> Vec<Vec<f64>> {
-    let mut norm_perl = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, period);
+fn normalize_perlin_map(width: usize, height: usize, map_z_axis: f64, period: usize) -> Vec<Vec<f64>> {
+    let mut norm_perl = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, map_z_axis, period);
     let (min_val, max_val) = norm_perl
         .par_iter()
         .flatten()

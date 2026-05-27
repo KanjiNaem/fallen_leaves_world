@@ -66,7 +66,7 @@ fn blend_rgb(base: Rgb<u8>, overlay: Rgb<u8>, overlay_weight: f64) -> Rgb<u8> {
 const OCEAN_RGB: Rgb<u8> = Rgb([20, 66, 114]);
 
 #[inline]
-fn terrain_elevation_color(
+fn terrain_elevation_color_with_water(
     terrain: &Vec<Vec<f64>>,
     x: usize,
     y: usize,
@@ -87,6 +87,19 @@ fn terrain_elevation_color(
         };
         land_palette.land_color(land_scale.clamp(0.0, 1.0))
     }
+}
+
+#[inline]
+fn terrain_elevation_color(
+    terrain: &Vec<Vec<f64>>,
+    x: usize,
+    y: usize,
+    min_val: f64,
+    range: f64,
+    land_palette: &LandElevationPalette,
+) -> Rgb<u8> {
+    let norm = ((terrain[y][x] - min_val) / range).clamp(0.0, 1.0);
+    land_palette.land_color(norm.clamp(0.0, 1.0))
 }
 
 #[derive(Clone, Debug)]
@@ -246,7 +259,7 @@ pub fn gen_local_flow_rainfall_map_img(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let elevation_color = terrain_elevation_color(
+            let elevation_color = terrain_elevation_color_with_water(
                 terrain,
                 x,
                 y,
@@ -306,7 +319,7 @@ pub fn gen_moisture_map_img(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let elevation_color = terrain_elevation_color(
+            let elevation_color = terrain_elevation_color_with_water(
                 terrain,
                 x,
                 y,
@@ -341,7 +354,39 @@ pub fn gen_moisture_map_img(
     println!("saved to {}", out_path.display());
 }
 
-pub fn gen_grey_with_waterlvl_highlighted(
+pub fn gen_perlin_rgb(
+    noise_vec: &Vec<Vec<f64>>,
+    land_palette: &LandElevationPalette,
+    file_name: String,
+) {
+    let grid_h = noise_vec.len();
+    let grid_w = noise_vec[0].len();
+    let (min_val, _, range) = min_max_range_2d(noise_vec);
+    let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
+
+    for y in 0..grid_h {
+        for x in 0..grid_w {
+            let px_color = terrain_elevation_color(
+                noise_vec,
+                x,
+                y,
+                min_val,
+                range,
+                land_palette,
+            );
+            img.put_pixel(x as u32, y as u32, px_color);
+        }
+    }
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
+    let out_path = out_dir.join(file_name);
+    img.save(&out_path).unwrap();
+
+    println!("saved to {}", out_path.display());
+}
+
+pub fn gen_perlin_rgb_with_water(
     noise_vec: &Vec<Vec<f64>>,
     water_level: f64,
     land_palette: &LandElevationPalette,
@@ -358,7 +403,7 @@ pub fn gen_grey_with_waterlvl_highlighted(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let px_color = terrain_elevation_color(
+            let px_color = terrain_elevation_color_with_water(
                 noise_vec,
                 x,
                 y,
@@ -491,7 +536,7 @@ pub fn gen_upwind_sparse_arrow_img(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let px_color = terrain_elevation_color(
+            let px_color = terrain_elevation_color_with_water(
                 terrain,
                 x,
                 y,
