@@ -119,6 +119,7 @@ pub fn gen_single_layer_perlin_greyscale(
 pub fn gen_octaved_perlin_greyscale(
     width: usize,
     height: usize,
+    map_z_axis: f64,
     start_period: usize,
     octaves: usize,
     attenuation: f64,
@@ -157,7 +158,7 @@ pub fn gen_octaved_perlin_greyscale(
         .for_each(|(out_row, acc_row)| {
             for x in 0..width {
                 let n = acc_row[x] / max_value;
-                out_row[x] = 255.0 + 255.0 * n;
+                out_row[x] = (map_z_axis / 2.0) * (1.0 + n);
             }
         });
 

@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use crate::{
-    chaos_influence_map, magic_influence_map, moisture_map, perlin_greyscale, smooth_terrain, wind_col_grad_and_local_rainfall_map_old
+    chaos_influence_map, magic_influence_map, moisture_map, perlin_greyscale, smooth_terrain,
+    wind_col_grad_and_local_rainfall_map_old,
 };
 pub struct WorldPipelineStepStruct {
     pub water_lvl: f64,
@@ -30,6 +31,7 @@ pub fn gen_world_pipeline_step_struct(
     let noise_base = perlin_greyscale::gen_octaved_perlin_greyscale(
         width,
         height,
+        map_z_axis,
         start_period,
         octaves,
         attenuation,
@@ -47,8 +49,12 @@ pub fn gen_world_pipeline_step_struct(
     println!("done!");
 
     println!("generating wind column base!");
-    let wind_column_noise_base =
-        perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, map_z_axis,start_period * 4);
+    let wind_column_noise_base = perlin_greyscale::gen_single_layer_perlin_greyscale(
+        width,
+        height,
+        map_z_axis,
+        start_period * 4,
+    );
     println!("done!");
 
     println!("generating flow maps");
@@ -91,23 +97,27 @@ pub fn gen_world_pipeline_step_struct(
     println!("done!");
 
     println!("gen magic noise map");
-    let magic_influence_map_base = perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 10000, 5, 0.7); 
-    let magic_influence_map = smooth_terrain::smooth_at_lvl(&magic_influence_map_base, 
-        map_z_axis / 10.0,
-        smooth_terrain::SUGGEST_BAND_FRAC,
+    let magic_influence_map_base =
+        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9);
+    let magic_influence_map = smooth_terrain::smooth_at_lvl(
+        &magic_influence_map_base,
+        50.0,
+        smooth_terrain::LARGE_RANGE_BAND_FRAC,
         smooth_terrain::SUGGEST_KEEP_POWER,
         smooth_terrain::SUGGEST_MIN_BAND,
-        );
+    );
     println!("done!");
-    
+
     println!("gen chaos noise map");
-    let chaos_influence_map_base = perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 10000, 5, 0.7);
-    let chaos_influence_map = smooth_terrain::smooth_at_lvl(&chaos_influence_map_base, 
-        map_z_axis / 10.0,
-        smooth_terrain::SUGGEST_BAND_FRAC,
+    let chaos_influence_map_base =
+        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9);
+    let chaos_influence_map = smooth_terrain::smooth_at_lvl(
+        &chaos_influence_map_base,
+        50.0,
+        smooth_terrain::LARGE_LEVEL_PULL,
         smooth_terrain::SUGGEST_KEEP_POWER,
         smooth_terrain::SUGGEST_MIN_BAND,
-        );
+    );
     println!("done!");
 
     WorldPipelineStepStruct {
@@ -119,6 +129,6 @@ pub fn gen_world_pipeline_step_struct(
         rainfall_map,
         moisture_map,
         magic_influence_map,
-        chaos_influence_map
+        chaos_influence_map,
     }
 }

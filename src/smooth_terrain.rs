@@ -14,8 +14,10 @@ fn smoothstep(edge_left: f64, edge_right: f64, x: f64) -> f64 {
 /// sugg band_span_fraction = 0.12;; share of map min–max span used as band
 // pub const SUGGEST_BAND_FRAC: f64 = 0.12;
 pub const SUGGEST_BAND_FRAC: f64 = 2.12;
+pub const LARGE_RANGE_BAND_FRAC: f64 = 20.0;
 /// sugg keep_orig_power = 1;; higher = stronger pull toward `water_level`.
 pub const SUGGEST_KEEP_POWER: f64 = 2.0;
+pub const LARGE_LEVEL_PULL: f64 = 100.0;
 /// sugg floor for band width in heightmap units = 6.0;; avoids a vanishingly thin band on flat maps
 pub const SUGGEST_MIN_BAND: f64 = 2.0;
 
