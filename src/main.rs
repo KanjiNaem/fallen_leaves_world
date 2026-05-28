@@ -3,6 +3,7 @@ use fallen_leaves_world::{img_gen, world_gen_pipeline};
 fn main() {
     let water_lvl = 120.0;
     let max_moisture = 1000.0;
+    let world_master_seed = 1123057435;
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
         1000,
         1000,
@@ -12,6 +13,7 @@ fn main() {
         0.7,
         water_lvl,
         max_moisture,
+        world_master_seed,
     );
 
     img_gen::gen_greyscale_img_from_vec(&pipeline.noise_base, format!("grey_pre_water_pass.png"));

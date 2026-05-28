@@ -24,6 +24,7 @@ pub fn gen_world_pipeline_step_struct(
     attenuation: f64,
     water_lvl: f64,
     max_moisture: f64,
+    world_master_seed: u64,
 ) -> WorldPipelineStepStruct {
     assert!(width == height);
 
@@ -35,7 +36,7 @@ pub fn gen_world_pipeline_step_struct(
         start_period,
         octaves,
         attenuation,
-        1,
+        world_master_seed,
     );
     println!("done!");
 
@@ -55,7 +56,7 @@ pub fn gen_world_pipeline_step_struct(
         height,
         map_z_axis,
         start_period * 4,
-        2,
+        world_master_seed + 1,
     );
     println!("done!");
 
