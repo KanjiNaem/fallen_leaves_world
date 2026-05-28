@@ -1,4 +1,4 @@
-use rand::{Rng, thread_rng};
+use crate::clcg_seed_gen::Clcg;
 use rayon::prelude::*;
 use std::f64::consts::PI;
 
@@ -24,10 +24,15 @@ fn smooth(x: f64) -> f64 {
     6.0 * x.powf(5.0) - 15.0 * x.powf(4.0) + 10.0 * x.powf(3.0)
 }
 
-fn rand_vec2d() -> Vec2d {
-    let mut rng = thread_rng();
-    let angle = rng.gen_range(0.0..(2.0 * PI));
+fn rand_vec2d(clcg_rng: &mut Clcg) -> Vec2d {
+    let angle = clcg_rng.next_f64() * 2.0 * PI;
     (angle.cos(), angle.sin())
+}
+
+fn build_perlin_lattice(lattice_h: usize, lattice_w: usize, clcg_rng: &mut Clcg) -> Vec<Vec<Vec2d>> {
+    (0..lattice_h)
+        .map(|_| (0..lattice_w).map(|_| rand_vec2d(clcg_rng)).collect())
+        .collect()
 }
 
 fn get_perlin_value(x: usize, y: usize, perlin_vectors: &Vec<Vec<Vec2d>>, period: usize) -> f64 {
@@ -91,6 +96,7 @@ pub fn gen_single_layer_perlin_greyscale(
     height: usize,
     map_z_axis: f64,
     period: usize,
+    master_seed: u64,
 ) -> Vec<Vec<f64>> {
     assert!(period >= 1);
 
@@ -98,9 +104,8 @@ pub fn gen_single_layer_perlin_greyscale(
     let lattice_h = ((height.saturating_sub(1)) as f64 / period as f64).floor() as usize + 2;
     let lattice_w = lattice_w.max(2);
     let lattice_h = lattice_h.max(2);
-    let perlin_vectors: Vec<Vec<Vec2d>> = (0..lattice_h)
-        .map(|_| (0..lattice_w).map(|_| rand_vec2d()).collect())
-        .collect();
+    let mut clcg_rng = Clcg::new(master_seed);
+    let perlin_vectors = build_perlin_lattice(lattice_h, lattice_w, &mut clcg_rng);
 
     let mut result_px_grid: Vec<Vec<f64>> = vec![vec![0.0; width]; height];
     result_px_grid
@@ -123,11 +128,13 @@ pub fn gen_octaved_perlin_greyscale(
     start_period: usize,
     octaves: usize,
     attenuation: f64,
+    master_seed: u64,
 ) -> Vec<Vec<f64>> {
     assert!(octaves > 0);
     assert!(start_period >= 1);
 
     let mut final_grid = vec![vec![0.0f64; width]; height];
+    let mut clcg_rng = Clcg::new(master_seed);
 
     for octave in 0..octaves {
         let period = (start_period / 2_usize.pow(octave as u32)).max(1);
@@ -137,9 +144,7 @@ pub fn gen_octaved_perlin_greyscale(
         let lattice_h = ((height.saturating_sub(1)) as f64 / period as f64).floor() as usize + 2;
         let lattice_w = lattice_w.max(2);
         let lattice_h = lattice_h.max(2);
-        let perlin_vectors: Vec<Vec<Vec2d>> = (0..lattice_h)
-            .map(|_| (0..lattice_w).map(|_| rand_vec2d()).collect())
-            .collect();
+        let perlin_vectors = build_perlin_lattice(lattice_h, lattice_w, &mut clcg_rng);
 
         final_grid.par_iter_mut().enumerate().for_each(|(y, row)| {
             for x in 0..width {

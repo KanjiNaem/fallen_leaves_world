@@ -57,9 +57,6 @@ pub fn gen_moisture_map(
                         let curr_percentile =
                             get_influence_moisture_percentile(curr_rad as f64, infl_rad as f64);
                         let deposit = curr_percentile * base_moisture;
-                        // if deposit <= 0.0 {
-                        //     return None;
-                        // }
 
                         Some((row_off + x, deposit))
                     })

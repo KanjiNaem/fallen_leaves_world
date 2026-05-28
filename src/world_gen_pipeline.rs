@@ -35,6 +35,7 @@ pub fn gen_world_pipeline_step_struct(
         start_period,
         octaves,
         attenuation,
+        1,
     );
     println!("done!");
 
@@ -54,6 +55,7 @@ pub fn gen_world_pipeline_step_struct(
         height,
         map_z_axis,
         start_period * 4,
+        2,
     );
     println!("done!");
 
@@ -98,7 +100,7 @@ pub fn gen_world_pipeline_step_struct(
 
     println!("gen magic noise map");
     let magic_influence_map_base =
-        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9);
+        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9, 3);
     let magic_influence_map = smooth_terrain::smooth_at_lvl(
         &magic_influence_map_base,
         50.0,
@@ -110,7 +112,7 @@ pub fn gen_world_pipeline_step_struct(
 
     println!("gen chaos noise map");
     let chaos_influence_map_base =
-        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9);
+        perlin_greyscale::gen_octaved_perlin_greyscale(width, height, 500.0, 1000, 3, 0.9, 4);
     let chaos_influence_map = smooth_terrain::smooth_at_lvl(
         &chaos_influence_map_base,
         50.0,

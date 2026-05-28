@@ -278,7 +278,8 @@ pub fn gen_wind_column_gradient_map(
 }
 
 fn normalize_perlin_map(width: usize, height: usize, map_z_axis: f64, period: usize) -> Vec<Vec<f64>> {
-    let mut norm_perl = perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, map_z_axis, period);
+    let mut norm_perl =
+        perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, map_z_axis, period, 0);
     let (min_val, max_val) = norm_perl
         .par_iter()
         .flatten()
