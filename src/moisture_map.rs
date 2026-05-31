@@ -109,7 +109,6 @@ fn get_influence_radius(width: usize, height: usize, water_body_size: usize) -> 
 }
 
 fn get_influence_moisture_percentile(curr_rad: f64, total_rad: f64) -> f64 {
-
     if curr_rad <= total_rad / 4.0 {
         return 1.0;
     } else if curr_rad <= total_rad / 3.0 {

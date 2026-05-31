@@ -6,7 +6,7 @@ async fn main() {
     let water_lvl = 220.0;
     // higher max means proportionally more moisture needed to be considered very moist
     let max_moisture = 400.0;
-    let world_master_seed = 2975456834;
+    let world_master_seed = 3328456;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
@@ -70,11 +70,11 @@ async fn main() {
     //     format!("moisture_map.png"),
     // );
 
-    // img_gen::gen_perlin_rgb(
-    //     &pipeline.magic_influence_map,
-    //     &img_gen::LandElevationPalette::default(),
-    //     format! {"magic_influence_map.png"},
-    // );
+    img_gen::gen_perlin_rgb(
+        &pipeline.magic_influence_map,
+        &img_gen::LandElevationPalette::default(),
+        format! {"magic_influence_map.png"},
+    );
 
     // img_gen::gen_perlin_rgb(
     //     &pipeline.chaos_influence_map,
@@ -82,13 +82,13 @@ async fn main() {
     //     format! {"chaos_influence_map.png"},
     // );
 
-    heightmap_view::view_heightmap(
-        &pipeline.smooth_noise,
-        water_lvl,
-        true,
-        heightmap_view::HeightmapViewConfig::default(),
-    )
-    .await;
+    // heightmap_view::view_heightmap(
+    //     &pipeline.smooth_noise,
+    //     water_lvl,
+    //     true,
+    //     heightmap_view::HeightmapViewConfig::default(),
+    // )
+    // .await;
 
     // heightmap_view::view_heightmap(
     //     &pipeline.chaos_influence_map,
