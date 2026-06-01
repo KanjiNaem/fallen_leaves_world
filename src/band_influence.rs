@@ -3,29 +3,30 @@ use rayon::prelude::*;
 
 // line_period: perlin cell size for line noise;  larger → smoother, longer curves before wiggle
 // warp_period: perlin cell size for two warp layers; larger → slower broader distortion
-// warp_amplitude: how far each sample is shifted before reading line field:
-//// wx = x + warp_amplitude * warp_x[y][x]
-//// wy = y + warp_y[y][x]
-//// warp_x / warp_y are roughly [-1, 1]; effective shift is ~±warp_amplitude; bigger → more bend and swirl;
-
-// band: half of width of ridge in noise units; perlin sample n is ~[-1, 1], ;trength is: (1 - |n| / band)² × low_max when |n| < band, else 0.
+// warp_amplitude: how far each sample is shifted before reading line field
+// band: half of width of ridge in noise units; perlin sample n is ~[-1, 1]; strength is: (1 - |n| / band)² × low_max when |n| < band, else 0.
 // small band: thin fill
 // large band: thick ribbons; near 1.0 almost everything gets some value
-// low_max: peak strength on the ridges; ceiling for band layer only, not the whole map
 
 pub fn gen_band_influence_map(
     width: usize,
     height: usize,
-    line_period: usize,
-    warp_period: usize,
-    warp_amplitude: f64,
-    band: f64,
-    low_max: f64,
-    p_peaks: usize,
-    peak_radius: f64,
-    peak_max: f64,
+    preset: &BandInfluencePresetVals,
     world_master_seed: u64,
 ) -> Vec<Vec<f64>> {
+    let preset: BandInfluencePreset = BandInfluencePreset::new(&preset, width);
+    let BandInfluencePreset {
+        line_period,
+        warp_period,
+        warp_amplitude,
+        band,
+        low_max,
+        peak_radius,
+        p_peaks,
+        peak_max,
+        bound,
+    } = preset;
+
     let line_noise = perlin_greyscale::gen_single_layer_perlin_greyscale(
         width,
         height,
@@ -68,6 +69,13 @@ pub fn gen_band_influence_map(
         let rng_y = rng.next_u32() % height as u32;
         stamp_disk(&mut map, rng_x as i32, rng_y as i32, peak_radius, peak_max);
     }
+
+    map.par_iter_mut().for_each(|row| {
+        for v in row {
+            *v = v.min(bound);
+        }
+    });
+
     map
 }
 
@@ -126,6 +134,127 @@ fn stamp_disk(map: &mut [Vec<f64>], x: i32, y: i32, rad: f64, strength: f64) {
             let x = x_pos as usize;
             let y = y_pos as usize;
             map[y][x] = map[y][x].max(v);
+        }
+    }
+}
+
+pub enum BandInfluencePresetVals {
+    Low,
+    Midde,
+    High,
+    VeryHigh,
+    LowNoDisks,
+    MiddleNoDisks,
+    HighNoDisks,
+    VeryHighNoDisks,
+}
+pub struct BandInfluencePreset {
+    line_period: usize,
+    warp_period: usize,
+    warp_amplitude: f64,
+    band: f64,
+    low_max: f64,
+    p_peaks: usize,
+    peak_radius: f64,
+    peak_max: f64,
+    bound: f64,
+}
+
+impl BandInfluencePreset {
+    pub fn bound(&self) -> f64 {
+        self.bound
+    }
+
+    pub fn new(preset: &BandInfluencePresetVals, width: usize) -> Self {
+        match preset {
+            BandInfluencePresetVals::Low => Self {
+                line_period: (width as f64 / 1.5).round() as usize,
+                warp_period: width,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.1,
+                low_max: 15.0,
+                p_peaks: 2,
+                peak_radius: 15.0,
+                peak_max: 100.0,
+                bound: 100.0,
+            },
+            BandInfluencePresetVals::Midde => Self {
+                line_period: (width as f64 / 2.0).round() as usize,
+                warp_period: (width as f64 / 0.8).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.3,
+                low_max: 20.0,
+                p_peaks: 3,
+                peak_radius: 25.0,
+                peak_max: 100.0,
+                bound: 100.0,
+            },
+            BandInfluencePresetVals::High => Self {
+                line_period: (width as f64 / 2.5).round() as usize,
+                warp_period: (width as f64 / 0.6).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.6,
+                low_max: 25.0,
+                p_peaks: 4,
+                peak_radius: 35.0,
+                peak_max: 100.0,
+                bound: 100.0,
+            },
+            BandInfluencePresetVals::VeryHigh => Self {
+                line_period: (width as f64 / 3.0).round() as usize,
+                warp_period: (width as f64 / 0.4).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.8,
+                low_max: 30.0,
+                p_peaks: 5,
+                peak_radius: 50.0,
+                peak_max: 100.0,
+                bound: 100.0,
+            },
+            BandInfluencePresetVals::LowNoDisks => Self {
+                line_period: (width as f64 / 1.5).round() as usize,
+                warp_period: width,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.1,
+                low_max: 15.0,
+                p_peaks: 0,
+                peak_radius: 0.0,
+                peak_max: 0.0,
+                bound: 50.0,
+            },
+            BandInfluencePresetVals::MiddleNoDisks => Self {
+                line_period: (width as f64 / 2.0).round() as usize,
+                warp_period: (width as f64 / 0.8).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.3,
+                low_max: 20.0,
+                p_peaks: 0,
+                peak_radius: 0.0,
+                peak_max: 0.0,
+                bound: 50.0,
+            },
+            BandInfluencePresetVals::HighNoDisks => Self {
+                line_period: (width as f64 / 2.5).round() as usize,
+                warp_period: (width as f64 / 0.6).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 0.6,
+                low_max: 25.0,
+                p_peaks: 0,
+                peak_radius: 0.0,
+                peak_max: 0.0,
+                bound: 50.0,
+            },
+            BandInfluencePresetVals::VeryHighNoDisks => Self {
+                line_period: (width as f64 / 7.0).round() as usize,
+                warp_period: (width as f64).round() as usize,
+                warp_amplitude: (width / 2) as f64,
+                band: 1.0,
+                low_max: 30.0,
+                p_peaks: 0,
+                peak_radius: 0.0,
+                peak_max: 0.0,
+                bound: 50.0,
+            },
         }
     }
 }

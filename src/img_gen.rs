@@ -22,7 +22,6 @@ fn min_max_range_2d(noise_vec: &Vec<Vec<f64>>) -> (f64, f64, f64) {
     (min_val, max_val, range)
 }
 
-/// High percentile of positive rainfall on land — stable display scale when a few peaks spike.
 fn land_rainfall_display_scale(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
@@ -166,7 +165,6 @@ impl LandElevationPalette {
 const FLOW_MOISTURE_OVERLAY_MIN: f64 = 0.42;
 const FLOW_MOISTURE_OVERLAY_MAX: f64 = 0.78;
 
-/// Tan → cyan → pale blue ramp used for flow-based local moisture (mountain rainfall).
 fn flow_moisture_color(t: f64) -> Rgb<u8> {
     const DRY_LAND: Rgb<u8> = Rgb([168, 145, 98]);
     const WET_LOW: Rgb<u8> = Rgb([55, 145, 175]);
@@ -189,7 +187,6 @@ fn flow_moisture_color(t: f64) -> Rgb<u8> {
     }
 }
 
-/// Moisture ramp: pale blue (dry) through saturated blues to red at `t == 1.0` (max moisture).
 fn moisture_color(t: f64) -> Rgb<u8> {
     let t = t.clamp(0.0, 1.0);
     let stops: [(f64, [f64; 3]); 5] = [
@@ -212,6 +209,52 @@ fn moisture_color(t: f64) -> Rgb<u8> {
         lerp_channel(c0[0], c1[0], u),
         lerp_channel(c0[1], c1[1], u),
         lerp_channel(c0[2], c1[2], u),
+    ])
+}
+
+#[inline]
+fn smoothstep01(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+#[inline]
+fn lerp_rgb(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
+#[inline]
+fn sample_smooth_gradient(stops: &[(f64, [f64; 3])], t: f64) -> [f64; 3] {
+    let t = t.clamp(0.0, 1.0);
+    let mut i = 0usize;
+    while i + 1 < stops.len() && t > stops[i + 1].0 {
+        i += 1;
+    }
+    let (t0, c0) = stops[i];
+    let (t1, c1) = stops[i + 1];
+    let span = (t1 - t0).max(1e-9);
+    let u = smoothstep01((t - t0) / span);
+    lerp_rgb(c0, c1, u)
+}
+
+fn temperature_color(t: f64) -> Rgb<u8> {
+    const STOPS: [(f64, [f64; 3]); 5] = [
+        (0.0, [8.0, 35.0, 140.0]),    // deep blue
+        (0.25, [90.0, 165.0, 245.0]), // light blue
+        (0.5, [255.0, 235.0, 55.0]),  // yellow
+        (0.75, [255.0, 145.0, 35.0]), // orange
+        (1.0, [215.0, 25.0, 20.0]),   // red
+    ];
+
+    let rgb = sample_smooth_gradient(&STOPS, t);
+    Rgb([
+        rgb[0].round().clamp(0.0, 255.0) as u8,
+        rgb[1].round().clamp(0.0, 255.0) as u8,
+        rgb[2].round().clamp(0.0, 255.0) as u8,
     ])
 }
 
@@ -292,8 +335,6 @@ pub fn gen_local_flow_rainfall_map_img(
     println!("saved to {}", out_path.display());
 }
 
-/// Renders land moisture over terrain. `max_moisture` is cell capacity (0..=max);
-/// color/overlay use `stored / max_moisture` so higher caps need more stored moisture to reach red.
 pub fn gen_moisture_map_img(
     rainfall: &Vec<Vec<f64>>,
     terrain: &Vec<Vec<f64>>,
@@ -354,6 +395,33 @@ pub fn gen_moisture_map_img(
     println!("saved to {}", out_path.display());
 }
 
+pub fn gen_temperature_map_img(
+    temperature: &Vec<Vec<f64>>,
+    min_possible_temp: f64,
+    max_possible_temp: f64,
+    file_name: String,
+) {
+    let grid_h = temperature.len();
+    let grid_w = temperature[0].len();
+    let temp_span = (max_possible_temp - min_possible_temp).max(f64::EPSILON);
+
+    let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
+
+    for y in 0..grid_h {
+        for x in 0..grid_w {
+            let temp_t = ((temperature[y][x] - min_possible_temp) / temp_span).clamp(0.0, 1.0);
+            img.put_pixel(x as u32, y as u32, temperature_color(temp_t));
+        }
+    }
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("output_imgs");
+    fs::create_dir_all(&out_dir).unwrap();
+    let out_path = out_dir.join(file_name);
+    img.save(&out_path).unwrap();
+
+    println!("saved to {}", out_path.display());
+}
+
 pub fn gen_perlin_rgb(
     noise_vec: &Vec<Vec<f64>>,
     land_palette: &LandElevationPalette,
@@ -366,14 +434,7 @@ pub fn gen_perlin_rgb(
 
     for y in 0..grid_h {
         for x in 0..grid_w {
-            let px_color = terrain_elevation_color(
-                noise_vec,
-                x,
-                y,
-                min_val,
-                range,
-                land_palette,
-            );
+            let px_color = terrain_elevation_color(noise_vec, x, y, min_val, range, land_palette);
             img.put_pixel(x as u32, y as u32, px_color);
         }
     }

@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use crate::{
     band_influence, moisture_map, perlin_greyscale, smooth_terrain, spotted_influence,
-    wind_col_grad_and_local_rainfall_map_old,
+    temperature_map, wind_col_grad_and_local_rainfall_map_old,
 };
 pub struct WorldPipelineStepStruct {
     pub water_lvl: f64,
@@ -11,6 +11,7 @@ pub struct WorldPipelineStepStruct {
     pub wind_column_gradient: Vec<Vec<Option<(usize, usize)>>>,
     pub rainfall_map: Vec<Vec<f64>>,
     pub moisture_map: Vec<Vec<f64>>,
+    pub temperature_map: Vec<Vec<f64>>,
     pub magic_influence_map: Vec<Vec<f64>>,
     pub chaos_influence_map: Vec<Vec<f64>>,
 }
@@ -24,6 +25,9 @@ pub fn gen_world_pipeline_step_struct(
     attenuation: f64,
     water_lvl: f64,
     max_moisture: f64,
+    magic_band_preset: band_influence::BandInfluencePresetVals,
+    temp_band_noise_effect: band_influence::BandInfluencePresetVals,
+    temp_preset: temperature_map::TempPresetVals,
     world_master_seed: u64,
 ) -> WorldPipelineStepStruct {
     assert!(width == height);
@@ -99,18 +103,24 @@ pub fn gen_world_pipeline_step_struct(
         moisture_map::gen_moisture_map(width, height, &smooth_noise, water_lvl, max_moisture);
     println!("done!");
 
+    println!("gen temperature map");
+    let temperature_map = temperature_map::gen_temperature_map(
+        width,
+        height,
+        &smooth_noise,
+        water_lvl,
+        temp_preset,
+        temp_band_noise_effect,
+        1.0,
+        world_master_seed,
+    );
+    println!("done!");
+
     println!("gen magic noise map");
     let magic_influence_map = band_influence::gen_band_influence_map(
         width,
         height,
-        width / 4,
-        width / 2,
-        width as f64 * 0.5,
-        0.99,
-        40.0,
-        3,
-        25.0,
-        100.0,
+        &magic_band_preset,
         world_master_seed,
     );
     println!("done!");
@@ -122,8 +132,8 @@ pub fn gen_world_pipeline_step_struct(
         4,
         400.0,
         20.0,
-        3,
-        25.0,
+        5,
+        50.0,
         100.0,
         world_master_seed + 1,
     );
@@ -137,6 +147,7 @@ pub fn gen_world_pipeline_step_struct(
         wind_column_gradient,
         rainfall_map,
         moisture_map,
+        temperature_map,
         magic_influence_map,
         chaos_influence_map,
     }

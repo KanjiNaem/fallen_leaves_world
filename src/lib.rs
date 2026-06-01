@@ -8,5 +8,6 @@ pub mod moisture_map;
 pub mod perlin_greyscale;
 pub mod smooth_terrain;
 pub mod spotted_influence;
+pub mod temperature_map;
 pub mod wind_col_grad_and_local_rainfall_map_old;
 pub mod world_gen_pipeline;
