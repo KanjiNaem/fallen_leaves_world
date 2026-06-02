@@ -1,4 +1,4 @@
-use fallen_leaves_world::temperature_map;
+use fallen_leaves_world::{spotted_influence, temperature_map};
 #[allow(unused_imports)]
 use fallen_leaves_world::{band_influence, heightmap_view, img_gen, world_gen_pipeline};
 
@@ -7,10 +7,11 @@ async fn main() {
     let water_lvl = 220.0;
     // higher max means proportionally more moisture needed to be considered very moist
     let max_moisture = 400.0;
-    let band_preset = band_influence::BandInfluencePresetVals::High;
+    let band_magic_preset = band_influence::BandInfluencePresetVals::High;
+    let spotted_chaos_preset = spotted_influence::SpottedInfluencePresetVals::High;
     let temp_preset = temperature_map::TempPresetVals::Middle;
     let temp_band_noise = band_influence::BandInfluencePresetVals::VeryHighNoDisks;
-    let world_master_seed = 3328456;
+    let world_master_seed = 3345;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
@@ -22,7 +23,8 @@ async fn main() {
         0.7,
         water_lvl,
         max_moisture,
-        band_preset,
+        band_magic_preset,
+        spotted_chaos_preset,
         temp_band_noise,
         temp_preset,
         world_master_seed,

@@ -3,14 +3,19 @@ use crate::clcg_seed_gen;
 pub fn gen_influence_map(
     width: usize,
     height: usize,
-    k_blobs: usize,
-    blob_radius: f64,
-    low_max: f64,
-    p_peaks: usize,
-    peak_radius: f64,
-    peak_max: f64,
+    preset: SpottedInfluencePresetVals,
     world_master_seed: u64,
 ) -> Vec<Vec<f64>> {
+    let preset = SpottedInfluencePreset::new(&preset);
+    let SpottedInfluencePreset {
+        k_blobs,
+        blob_radius,
+        low_max,
+        p_peaks,
+        peak_radius,
+        peak_max,
+    } = preset;
+
     let mut map = vec![vec![0.0; width]; height];
     let mut rng: clcg_seed_gen::Clcg = clcg_seed_gen::Clcg::new(world_master_seed);
 
@@ -51,6 +56,61 @@ fn stamp_disk(map: &mut [Vec<f64>], cx: f64, cy: f64, rad: f64, strength: f64) {
             let x = (x_pos) as usize;
             let y = (y_pos) as usize;
             map[y][x] = map[y][x].max(v);
+        }
+    }
+}
+
+pub enum SpottedInfluencePresetVals {
+    Low,
+    Middle,
+    High,
+    VeryHigh,
+}
+pub struct SpottedInfluencePreset {
+    k_blobs: usize,
+    blob_radius: f64,
+    low_max: f64,
+    p_peaks: usize,
+    peak_radius: f64,
+    peak_max: f64,
+}
+
+impl SpottedInfluencePreset {
+
+    pub fn new(preset: &SpottedInfluencePresetVals) -> Self {
+        match preset {
+            SpottedInfluencePresetVals::Low => Self {
+                k_blobs: 1,
+                blob_radius: 95.0,
+                low_max: 20.0,
+                p_peaks: 2,
+                peak_radius: 15.0,
+                peak_max: 100.0,
+            },
+            SpottedInfluencePresetVals::Middle => Self {
+                k_blobs: 2,
+                blob_radius: 115.0,
+                low_max: 20.0,
+                p_peaks: 2,
+                peak_radius: 20.0,
+                peak_max: 100.0,
+            },
+            SpottedInfluencePresetVals::High => Self {
+                k_blobs: 3,
+                blob_radius: 135.0,
+                low_max: 20.0,
+                p_peaks: 3,
+                peak_radius: 25.0,
+                peak_max: 100.0,
+            },
+            SpottedInfluencePresetVals::VeryHigh => Self {
+                k_blobs: 4,
+                blob_radius: 155.0,
+                low_max: 20.0,
+                p_peaks: 4,
+                peak_radius: 30.0,
+                peak_max: 100.0,
+            },
         }
     }
 }

@@ -26,6 +26,7 @@ pub fn gen_world_pipeline_step_struct(
     water_lvl: f64,
     max_moisture: f64,
     magic_band_preset: band_influence::BandInfluencePresetVals,
+    chaos_spotted_preset: spotted_influence::SpottedInfluencePresetVals,
     temp_band_noise_effect: band_influence::BandInfluencePresetVals,
     temp_preset: temperature_map::TempPresetVals,
     world_master_seed: u64,
@@ -129,12 +130,7 @@ pub fn gen_world_pipeline_step_struct(
     let chaos_influence_map = spotted_influence::gen_influence_map(
         width,
         height,
-        4,
-        400.0,
-        20.0,
-        5,
-        50.0,
-        100.0,
+        chaos_spotted_preset,
         world_master_seed + 1,
     );
     println!("done!");

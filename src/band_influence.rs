@@ -140,7 +140,7 @@ fn stamp_disk(map: &mut [Vec<f64>], x: i32, y: i32, rad: f64, strength: f64) {
 
 pub enum BandInfluencePresetVals {
     Low,
-    Midde,
+    Middle,
     High,
     VeryHigh,
     LowNoDisks,
@@ -178,7 +178,7 @@ impl BandInfluencePreset {
                 peak_max: 100.0,
                 bound: 100.0,
             },
-            BandInfluencePresetVals::Midde => Self {
+            BandInfluencePresetVals::Middle => Self {
                 line_period: (width as f64 / 2.0).round() as usize,
                 warp_period: (width as f64 / 0.8).round() as usize,
                 warp_amplitude: (width / 2) as f64,
