@@ -32,7 +32,7 @@ pub fn gen_influence_map(
     map
 }
 
-fn stamp_disk(map: &mut [Vec<f64>], cx: f64, cy: f64, rad: f64, strength: f64) {
+pub fn stamp_disk(map: &mut [Vec<f64>], cx: f64, cy: f64, rad: f64, strength: f64) {
     let rad_i = rad.ceil() as i32;
     let cx_i = cx as i32;
     let cy_i = cy as i32;
@@ -76,7 +76,6 @@ pub struct SpottedInfluencePreset {
 }
 
 impl SpottedInfluencePreset {
-
     pub fn new(preset: &SpottedInfluencePresetVals) -> Self {
         match preset {
             SpottedInfluencePresetVals::Low => Self {

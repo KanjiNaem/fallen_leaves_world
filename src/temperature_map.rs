@@ -1,4 +1,4 @@
-use crate::band_influence;
+use crate::{band_influence, clcg_seed_gen, perlin_greyscale, spotted_influence};
 use rayon::prelude::*;
 
 // lowest lower_bound for img gen
@@ -23,12 +23,25 @@ pub fn gen_temperature_map(
         base_water_temp,
         lower_bound,
         upper_bound,
+        heat_disks,
+        cold_disks,
     } = preset;
 
     let band_temp_noise_map =
         band_influence::gen_band_influence_map(width, height, &band_preset, world_master_seed);
     let highest_influence = band_influence::BandInfluencePreset::bound(
         &band_influence::BandInfluencePreset::new(&band_preset, width),
+    );
+
+    // added at 20 percent weight (max +20 at 200, -20 at 0)
+    let added_rand_noise = perlin_greyscale::gen_octaved_perlin_greyscale(
+        width,
+        width,
+        200.0,
+        200,
+        3,
+        0.3,
+        world_master_seed + 11,
     );
 
     let norm_band_temp_noise_map: Vec<Vec<f64>> = band_temp_noise_map
@@ -40,6 +53,20 @@ pub fn gen_temperature_map(
         })
         .collect();
 
+    let mut heat_disc_map = vec![vec![0.0; width]; height];
+    let mut cold_disc_map = vec![vec![0.0; width]; height];
+    let mut rng = clcg_seed_gen::Clcg::new(world_master_seed + 12);
+    for _ in 0..heat_disks {
+        let cx = rng.next_u32() % width as u32;
+        let cy = rng.next_u32() % height as u32;
+        spotted_influence::stamp_disk(&mut heat_disc_map, cx as f64, cy as f64, 150.0, 30.0);
+    }
+    for _ in 0..cold_disks {
+        let cx = rng.next_u32() % width as u32;
+        let cy = rng.next_u32() % height as u32;
+        spotted_influence::stamp_disk(&mut cold_disc_map, cx as f64, cy as f64, 50.0, 30.0);
+    }
+
     let temp_map: Vec<Vec<f64>> = (0..height)
         .into_par_iter()
         .map(|y| {
@@ -49,13 +76,19 @@ pub fn gen_temperature_map(
                         let base_temp = base_water_temp;
                         let relative_height = terrain_map[y][x] - water_lvl;
                         ((base_temp - (height_weight_coef * relative_height))
-                            + 10.0 * (band_influence_coef * norm_band_temp_noise_map[y][x]))
+                            + 10.0 * (band_influence_coef * norm_band_temp_noise_map[y][x])
+                            + (added_rand_noise[y][x] - 100.0) / 5.0
+                            + heat_disc_map[y][x]
+                            - cold_disc_map[y][x])
                             .clamp(lower_bound, upper_bound)
                     } else {
                         let base_temp = base_land_temp;
                         let relative_height = water_lvl - terrain_map[y][x];
                         ((base_temp - (height_weight_coef * relative_height))
-                            * (1.0 + (band_influence_coef * norm_band_temp_noise_map[y][x])))
+                            * (1.0 + (band_influence_coef * norm_band_temp_noise_map[y][x]))
+                            + (added_rand_noise[y][x] - 100.0) / 5.0
+                            + heat_disc_map[y][x]
+                            - cold_disc_map[y][x])
                             .clamp(lower_bound, upper_bound)
                     }
                 })
@@ -77,6 +110,8 @@ pub struct TempPreset {
     base_water_temp: f64,
     lower_bound: f64,
     upper_bound: f64,
+    heat_disks: usize,
+    cold_disks: usize,
 }
 
 impl TempPreset {
@@ -84,17 +119,21 @@ impl TempPreset {
         match preset {
             TempPresetVals::Low => Self {
                 height_weight_coef: 0.05,
-                base_land_temp: 18.0,
-                base_water_temp: 12.0,
+                base_land_temp: 10.0,
+                base_water_temp: 6.0,
                 lower_bound: -25.0,
                 upper_bound: 50.0,
+                heat_disks: 3,
+                cold_disks: 5,
             },
             TempPresetVals::Middle => Self {
                 height_weight_coef: 0.025,
-                base_land_temp: 22.0,
-                base_water_temp: 16.0,
+                base_land_temp: 16.0,
+                base_water_temp: 12.0,
                 lower_bound: -15.0,
                 upper_bound: 60.0,
+                heat_disks: 4,
+                cold_disks: 4,
             },
             TempPresetVals::High => Self {
                 height_weight_coef: 0.015,
@@ -102,6 +141,8 @@ impl TempPreset {
                 base_water_temp: 19.0,
                 lower_bound: -5.0,
                 upper_bound: 70.0,
+                heat_disks: 5,
+                cold_disks: 3,
             },
             TempPresetVals::VeryHigh => Self {
                 height_weight_coef: 0.001,
@@ -109,6 +150,8 @@ impl TempPreset {
                 base_water_temp: 24.0,
                 lower_bound: 0.0,
                 upper_bound: 75.0,
+                heat_disks: 6,
+                cold_disks: 3,
             },
         }
     }

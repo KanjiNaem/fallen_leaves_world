@@ -395,14 +395,108 @@ pub fn gen_moisture_map_img(
     println!("saved to {}", out_path.display());
 }
 
+const FONT_5X7: [[u8; 7]; 10] = [
+    [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
+    [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+    [0b01110, 0b10001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111],
+    [0b01110, 0b10001, 0b00010, 0b01110, 0b00010, 0b10001, 0b01110],
+    [0b00010, 0b00110, 0b01010, 0b11111, 0b00010, 0b00010, 0b00010],
+    [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
+    [0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+    [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b10000],
+    [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+    [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100],
+];
+const FONT_MINUS_5X7: [u8; 7] = [0b00000, 0b00000, 0b00000, 0b11100, 0b00000, 0b00000, 0b00000];
+
+fn put_pixel_safe(img: &mut RgbImage, x: i32, y: i32, color: Rgb<u8>) {
+    if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32 {
+        img.put_pixel(x as u32, y as u32, color);
+    }
+}
+
+fn draw_bitmap_glyph(
+    img: &mut RgbImage,
+    rows: &[u8; 7],
+    x0: i32,
+    y0: i32,
+    scale: i32,
+    color: Rgb<u8>,
+) {
+    for (row_i, &row) in rows.iter().enumerate() {
+        for col_i in 0..5 {
+            if row & (1 << (4 - col_i)) != 0 {
+                for dy in 0..scale {
+                    for dx in 0..scale {
+                        put_pixel_safe(
+                            img,
+                            x0 + col_i * scale + dx,
+                            y0 + row_i as i32 * scale + dy,
+                            color,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn draw_bitmap_digit(img: &mut RgbImage, digit: u8, x0: i32, y0: i32, scale: i32, color: Rgb<u8>) {
+    if digit < 10 {
+        draw_bitmap_glyph(img, &FONT_5X7[digit as usize], x0, y0, scale, color);
+    }
+}
+
+fn draw_bitmap_text(img: &mut RgbImage, text: &str, cx: i32, cy: i32, scale: i32, fg: Rgb<u8>) {
+    const CHAR_W: i32 = 6;
+    const CHAR_H: i32 = 7;
+    let shadow = Rgb([0u8, 0, 0]);
+    let text_w = text.len() as i32 * CHAR_W * scale - scale;
+    let text_h = CHAR_H * scale;
+    let start_x = cx - text_w / 2;
+    let start_y = cy - text_h / 2;
+
+    let mut x = start_x;
+    for ch in text.chars() {
+        if ch == '-' {
+            draw_bitmap_glyph(img, &FONT_MINUS_5X7, x + 1, start_y + 1, scale, shadow);
+            draw_bitmap_glyph(img, &FONT_MINUS_5X7, x, start_y, scale, fg);
+        } else if let Some(digit) = ch.to_digit(10) {
+            draw_bitmap_digit(img, digit as u8, x + 1, start_y + 1, scale, shadow);
+            draw_bitmap_digit(img, digit as u8, x, start_y, scale, fg);
+        } else {
+            continue;
+        }
+        x += CHAR_W * scale;
+    }
+}
+
+fn avg_temp_in_cell(temperature: &Vec<Vec<f64>>, x0: usize, y0: usize, step: usize) -> f64 {
+    let grid_h = temperature.len();
+    let grid_w = temperature[0].len();
+    let x1 = (x0 + step).min(grid_w);
+    let y1 = (y0 + step).min(grid_h);
+    let mut sum = 0.0;
+    let mut count = 0usize;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            sum += temperature[y][x];
+            count += 1;
+        }
+    }
+    sum / count as f64
+}
+
 pub fn gen_temperature_map_img(
     temperature: &Vec<Vec<f64>>,
     min_possible_temp: f64,
     max_possible_temp: f64,
+    step: usize,
     file_name: String,
 ) {
     let grid_h = temperature.len();
     let grid_w = temperature[0].len();
+    let step = step.max(1);
     let temp_span = (max_possible_temp - min_possible_temp).max(f64::EPSILON);
 
     let mut img = RgbImage::new(grid_w as u32, grid_h as u32);
@@ -411,6 +505,20 @@ pub fn gen_temperature_map_img(
         for x in 0..grid_w {
             let temp_t = ((temperature[y][x] - min_possible_temp) / temp_span).clamp(0.0, 1.0);
             img.put_pixel(x as u32, y as u32, temperature_color(temp_t));
+        }
+    }
+
+    let label_color = Rgb([255u8, 255, 220]);
+    const LABEL_SCALE: i32 = 2;
+    const LABEL_GAP_CELLS: f64 = 0.25;
+    let label_stride = ((step as f64) * (1.0 + LABEL_GAP_CELLS)).round() as usize;
+    for y in (0..grid_h).step_by(label_stride) {
+        for x in (0..grid_w).step_by(label_stride) {
+            let avg_temp = avg_temp_in_cell(temperature, x, y, step);
+            let label = format!("{}", avg_temp.round() as i64);
+            let cx = x as i32 + step as i32 / 2;
+            let cy = y as i32 + step as i32 / 2;
+            draw_bitmap_text(&mut img, &label, cx, cy, LABEL_SCALE, label_color);
         }
     }
 

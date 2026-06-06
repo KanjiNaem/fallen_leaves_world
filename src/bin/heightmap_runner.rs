@@ -1,6 +1,6 @@
-use fallen_leaves_world::{spotted_influence, temperature_map};
 #[allow(unused_imports)]
 use fallen_leaves_world::{band_influence, heightmap_view, img_gen, world_gen_pipeline};
+use fallen_leaves_world::{spotted_influence, temperature_map};
 
 #[kiss3d::main]
 async fn main() {
@@ -11,7 +11,7 @@ async fn main() {
     let spotted_chaos_preset = spotted_influence::SpottedInfluencePresetVals::High;
     let temp_preset = temperature_map::TempPresetVals::Middle;
     let temp_band_noise = band_influence::BandInfluencePresetVals::VeryHighNoDisks;
-    let world_master_seed = 3345;
+    let world_master_seed = 33345;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
@@ -83,6 +83,7 @@ async fn main() {
         &pipeline.temperature_map,
         temperature_map::TEMP_DISPLAY_MIN,
         temperature_map::TEMP_DISPLAY_MAX,
+        24,
         format!("temperature_map.png"),
     );
 
