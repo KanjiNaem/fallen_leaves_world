@@ -27,13 +27,34 @@ pub fn gen_temperature_map(
         cold_disks,
     } = preset;
 
-    let band_temp_noise_map =
+    let band_temp_hot_map =
         band_influence::gen_band_influence_map(width, height, &band_preset, world_master_seed);
-    let highest_influence = band_influence::BandInfluencePreset::bound(
+    let band_temp_cold_map = band_influence::gen_band_influence_map(width, height, &band_preset, world_master_seed + 1);
+    let highest_hot_influence = band_influence::BandInfluencePreset::bound(
+        &band_influence::BandInfluencePreset::new(&band_preset, width),
+    );
+    let highest_cold_influence = band_influence::BandInfluencePreset::bound(
         &band_influence::BandInfluencePreset::new(&band_preset, width),
     );
 
-    // added at 20 percent weight (max +20 at 200, -20 at 0)
+    let norm_band_temp_cold_map: Vec<Vec<f64>> = band_temp_cold_map
+        .par_iter()
+        .map(|row| {
+            row.par_iter()
+                .map(|&curr_val| curr_val / highest_cold_influence)
+                .collect()
+        })
+        .collect();
+    let norm_band_temp_hot_map: Vec<Vec<f64>> = band_temp_hot_map
+        .par_iter()
+        .map(|row| {
+            row.par_iter()
+                .map(|&curr_val| curr_val / highest_hot_influence)
+                .collect()
+        })
+        .collect();
+
+        // added at 20 percent weight (max +20 at 200, -20 at 0)
     let added_rand_noise = perlin_greyscale::gen_octaved_perlin_greyscale(
         width,
         width,
@@ -43,15 +64,6 @@ pub fn gen_temperature_map(
         0.3,
         world_master_seed + 11,
     );
-
-    let norm_band_temp_noise_map: Vec<Vec<f64>> = band_temp_noise_map
-        .par_iter()
-        .map(|row| {
-            row.par_iter()
-                .map(|&curr_val| curr_val / highest_influence)
-                .collect()
-        })
-        .collect();
 
     let mut heat_disc_map = vec![vec![0.0; width]; height];
     let mut cold_disc_map = vec![vec![0.0; width]; height];
@@ -76,7 +88,8 @@ pub fn gen_temperature_map(
                         let base_temp = base_water_temp;
                         let relative_height = terrain_map[y][x] - water_lvl;
                         ((base_temp - (height_weight_coef * relative_height))
-                            + 10.0 * (band_influence_coef * norm_band_temp_noise_map[y][x])
+                            + 10.0 * (band_influence_coef * norm_band_temp_hot_map[y][x])
+                            - 10.0 * (band_influence_coef * norm_band_temp_cold_map[y][x])
                             + (added_rand_noise[y][x] - 100.0) / 5.0
                             + heat_disc_map[y][x]
                             - cold_disc_map[y][x])
@@ -85,7 +98,8 @@ pub fn gen_temperature_map(
                         let base_temp = base_land_temp;
                         let relative_height = water_lvl - terrain_map[y][x];
                         ((base_temp - (height_weight_coef * relative_height))
-                            * (1.0 + (band_influence_coef * norm_band_temp_noise_map[y][x]))
+                            * (1.0 + (band_influence_coef * norm_band_temp_hot_map[y][x]))
+                            - 1.0 * (band_influence_coef * norm_band_temp_cold_map[y][x])
                             + (added_rand_noise[y][x] - 100.0) / 5.0
                             + heat_disc_map[y][x]
                             - cold_disc_map[y][x])
