@@ -54,6 +54,37 @@ pub fn gen_water_body_size(
     water_body_size_map
 }
 
+pub fn get_adj_height_diff_map(
+    width: usize,
+    height: usize,
+    terrain_map: Vec<Vec<f64>>,
+) -> Vec<Vec<(f64, f64)>> {
+    // return vec![vec![(0.0, 0.0); 0]; 0];
+    (0..height)
+        .into_par_iter()
+        .map(|y| {
+            (0..width)
+                .map(|x| {
+                    let mut smallest_height = f64::INFINITY;
+                    let mut largest_height = f64::NEG_INFINITY;
+                    for &(cx, cy) in &CARDINAL_DELTAS {
+                        if y as isize + cy < 0 || x as isize + cx < 0 {
+                            continue;
+                        }
+                        if terrain_map[y][x] < smallest_height {
+                            smallest_height = terrain_map[y][x];
+                        }
+                        if terrain_map[y][x] > largest_height {
+                            largest_height = terrain_map[y][x];
+                        }
+                    }
+                    (smallest_height, largest_height)
+                })
+                .collect()
+        })
+        .collect()
+}
+
 pub fn shore_adjacent_water_coords(
     terrain_map: &Vec<Vec<f64>>,
     water_lvl: f64,

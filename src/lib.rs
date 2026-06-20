@@ -1,3 +1,4 @@
+pub mod assign_biome;
 pub mod band_influence;
 pub mod clcg_seed_gen;
 pub mod elevation_redistrib;

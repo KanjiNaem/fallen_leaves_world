@@ -11,7 +11,7 @@ async fn main() {
     let spotted_chaos_preset = spotted_influence::SpottedInfluencePresetVals::High;
     let temp_preset = temperature_map::TempPresetVals::Middle;
     let temp_band_noise = band_influence::BandInfluencePresetVals::VeryHighNoDisks;
-    let world_master_seed = 33345935;
+    let world_master_seed = 333452475935;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
