@@ -1,3 +1,4 @@
+use crate::assign_biome;
 #[allow(unused_imports)]
 use crate::{
     band_influence, moisture_map, perlin_greyscale, smooth_terrain, spotted_influence,
@@ -14,6 +15,7 @@ pub struct WorldPipelineStepStruct {
     pub temperature_map: Vec<Vec<f64>>,
     pub magic_influence_map: Vec<Vec<f64>>,
     pub chaos_influence_map: Vec<Vec<f64>>,
+    pub biome_map: Vec<Vec<assign_biome::Biomes>>,
 }
 
 pub fn gen_world_pipeline_step_struct(
@@ -135,6 +137,22 @@ pub fn gen_world_pipeline_step_struct(
     );
     println!("done!");
 
+    println!("assigning biomes");
+    let biome_map = assign_biome::assign_biome(
+        width,
+        height,
+        &smooth_noise,
+        &moisture_map,
+        &rainfall_map,
+        &temperature_map,
+        &magic_influence_map,
+        &chaos_influence_map,
+        water_lvl,
+        max_moisture,
+        assign_biome::BiomeParamPresetVals::Basic,
+    );
+    println!("done!");
+
     WorldPipelineStepStruct {
         water_lvl,
         noise_base,
@@ -146,5 +164,6 @@ pub fn gen_world_pipeline_step_struct(
         temperature_map,
         magic_influence_map,
         chaos_influence_map,
+        biome_map,
     }
 }
