@@ -11,5 +11,9 @@ rand = "0.8"
 rayon = "1.10"
 
 [[bin]]
-name = "heightmap_runner"
-path = "src/bin/heightmap_runner.rs"
+name = "renderer_worldgen_runner"
+path = "src/bin/renderer_worldgen_runner.rs"
+
+[[bin]]
+name = "verify_biome_params"
+path = "src/bin/verify_biome_params.rs"

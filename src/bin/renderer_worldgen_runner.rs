@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use fallen_leaves_world::{band_influence, heightmap_view, img_gen, world_gen_pipeline};
+use fallen_leaves_world::{band_influence, img_gen, terrain_renderer, world_gen_pipeline};
 use fallen_leaves_world::{spotted_influence, temperature_map};
 
 #[kiss3d::main]
@@ -11,12 +11,12 @@ async fn main() {
     let spotted_chaos_preset = spotted_influence::SpottedInfluencePresetVals::High;
     let temp_preset = temperature_map::TempPresetVals::Middle;
     let temp_band_noise = band_influence::BandInfluencePresetVals::VeryHighNoDisks;
-    let world_master_seed = 333452475935;
+    let world_master_seed = 3180759893465;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(
-        2000,
-        2000,
+        2500,
+        2500,
         500.0,
         500,
         8,
@@ -99,19 +99,14 @@ async fn main() {
         format! {"chaos_influence_map.png"},
     );
 
-    // heightmap_view::view_heightmap(
-    //     &pipeline.smooth_noise,
-    //     water_lvl,
-    //     true,
-    //     heightmap_view::HeightmapViewConfig::default(),
-    // )
-    // .await;
-
-    // heightmap_view::view_heightmap(
-    //     &pipeline.chaos_influence_map,
-    //     water_lvl,
-    //     false,
-    //     heightmap_view::HeightmapViewConfig::default(),
-    // )
-    // .await;
+    terrain_renderer::view_terrain(
+        &pipeline.smooth_noise,
+        &pipeline.biome_map,
+        &pipeline.magic_influence_map,
+        &pipeline.chaos_influence_map,
+        water_lvl,
+        true,
+        terrain_renderer::TerrainRendererConfig::default(),
+    )
+    .await;
 }

@@ -125,18 +125,23 @@ fn borders_land(
     })
 }
 
-pub fn gen_dist_ocean_map(
-    terrain_map: &Vec<Vec<f64>>,
+pub fn gen_dist_specific_ocean_map(
     width: usize,
     height: usize,
-    water_lvl: f64,
+    water_body_groups: &FxHashMap<i32, Vec<(usize, usize)>>,
+    min_body_size_threshold: i32,
 ) -> Vec<Vec<f64>> {
     let mut dist_ocean_map = vec![vec![f64::INFINITY; width]; height];
     let mut queue = VecDeque::new();
 
-    for &(x, y) in shore_adjacent_water_coords(terrain_map, water_lvl).iter() {
-        dist_ocean_map[y][x] = 0.0;
-        queue.push_back((x, y));
+    for vec in water_body_groups.values() {
+        if (vec.len() as i32) < min_body_size_threshold {
+            continue;
+        }
+        for &(x, y) in vec {
+            dist_ocean_map[y][x] = 0.0;
+            queue.push_back((x, y));
+        }
     }
 
     while let Some((x, y)) = queue.pop_front() {

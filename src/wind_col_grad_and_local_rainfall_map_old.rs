@@ -213,8 +213,14 @@ pub fn gen_rainfall_map(
     water_lvl: f64,
     map_start_period: usize,
 ) -> Vec<Vec<f64>> {
-    let (ocean_dist_map, phi_map) =
-        gen_flow_rank_maps(width, height, map_z_axis, terrain_map, map_start_period, water_lvl);
+    let (ocean_dist_map, phi_map) = gen_flow_rank_maps(
+        width,
+        height,
+        map_z_axis,
+        terrain_map,
+        map_start_period,
+        water_lvl,
+    );
     let upwind_neighbor_map = gen_upwind_map(
         width,
         height,
@@ -244,7 +250,12 @@ pub fn gen_flow_rank_maps(
 ) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let norm_perl = normalize_perlin_map(width, height, map_z_axis, map_start_period * 4);
     let lambda = 0.2;
-    let ocean_dist_map = helpers::gen_dist_ocean_map(terrain_map, width, height, water_lvl);
+    let ocean_dist_map = helpers::gen_dist_specific_ocean_map(
+        width,
+        height,
+        &helpers::group_water_bodies(width, height, terrain_map, water_lvl),
+        500,
+    );
     let phi_current_map = gen_phi_current_map(
         terrain_map,
         width,
@@ -265,8 +276,14 @@ pub fn gen_wind_column_gradient_map(
     map_start_period: usize,
     water_lvl: f64,
 ) -> Vec<Vec<Option<(usize, usize)>>> {
-    let (ocean_dist_map, phi_current_map) =
-        gen_flow_rank_maps(width, height, map_z_axis, terrain_map, map_start_period, water_lvl);
+    let (ocean_dist_map, phi_current_map) = gen_flow_rank_maps(
+        width,
+        height,
+        map_z_axis,
+        terrain_map,
+        map_start_period,
+        water_lvl,
+    );
     gen_upwind_map(
         width,
         height,
@@ -277,7 +294,12 @@ pub fn gen_wind_column_gradient_map(
     )
 }
 
-fn normalize_perlin_map(width: usize, height: usize, map_z_axis: f64, period: usize) -> Vec<Vec<f64>> {
+fn normalize_perlin_map(
+    width: usize,
+    height: usize,
+    map_z_axis: f64,
+    period: usize,
+) -> Vec<Vec<f64>> {
     let mut norm_perl =
         perlin_greyscale::gen_single_layer_perlin_greyscale(width, height, map_z_axis, period, 0);
     let (min_val, max_val) = norm_perl

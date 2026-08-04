@@ -1,4 +1,4 @@
-use crate::assign_biome;
+use crate::{assign_biome, helpers};
 #[allow(unused_imports)]
 use crate::{
     band_influence, moisture_map, perlin_greyscale, smooth_terrain, spotted_influence,
@@ -147,6 +147,13 @@ pub fn gen_world_pipeline_step_struct(
         &temperature_map,
         &magic_influence_map,
         &chaos_influence_map,
+        &helpers::gen_water_body_size(width, height, &smooth_noise, water_lvl),
+        &helpers::gen_dist_specific_ocean_map(
+            width,
+            width,
+            &helpers::group_water_bodies(width, height, &smooth_noise, water_lvl),
+            500,
+        ),
         water_lvl,
         max_moisture,
         assign_biome::BiomeParamPresetVals::Basic,
