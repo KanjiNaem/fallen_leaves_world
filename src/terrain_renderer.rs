@@ -55,6 +55,22 @@ impl TerrainColorMode {
         }
     }
 
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::Height => Self::Biome,
+            Self::Biome => Self::WarpedInfluence,
+            Self::WarpedInfluence => Self::ChaoticInfluence,
+            Self::ChaoticInfluence => Self::Height,
+        }
+    }
+
+    pub fn toggle_biome(self) -> Self {
+        match self {
+            Self::Biome => Self::Height,
+            _ => Self::Biome,
+        }
+    }
+
     fn texture_name(self) -> &'static str {
         match self {
             Self::Height => "terrain_height",
@@ -210,13 +226,7 @@ fn draw_biome_legend(window: &mut Window, font: &std::sync::Arc<Font>) {
         let color = rgb_u8_to_color(biome_color(biome));
         // Colored swatch + name via text (2D points use a different camera space).
         window.draw_text("###", Vec2::new(x, y), TEXT_SCALE, font, color);
-        window.draw_text(
-            name,
-            Vec2::new(x + 42.0, y),
-            TEXT_SCALE,
-            font,
-            color,
-        );
+        window.draw_text(name, Vec2::new(x + 42.0, y), TEXT_SCALE, font, color);
     }
 }
 
@@ -811,19 +821,27 @@ pub async fn view_terrain(
                     render_mode = render_mode.toggle();
                 }
                 WindowEvent::Key(Key::C, Action::Press, _) => {
-                    color_mode = TerrainColorMode::Height;
+                    color_mode = color_mode.cycle();
                     color_changed = true;
                 }
                 WindowEvent::Key(Key::B, Action::Press, _) => {
-                    color_mode = TerrainColorMode::Biome;
+                    color_mode = color_mode.toggle_biome();
                     color_changed = true;
                 }
                 WindowEvent::Key(Key::W, Action::Press, _) => {
-                    color_mode = TerrainColorMode::WarpedInfluence;
+                    color_mode = if color_mode == TerrainColorMode::WarpedInfluence {
+                        TerrainColorMode::Height
+                    } else {
+                        TerrainColorMode::WarpedInfluence
+                    };
                     color_changed = true;
                 }
                 WindowEvent::Key(Key::K, Action::Press, _) => {
-                    color_mode = TerrainColorMode::ChaoticInfluence;
+                    color_mode = if color_mode == TerrainColorMode::ChaoticInfluence {
+                        TerrainColorMode::Height
+                    } else {
+                        TerrainColorMode::ChaoticInfluence
+                    };
                     color_changed = true;
                 }
                 WindowEvent::Key(Key::L, Action::Press, _) => {
@@ -845,13 +863,13 @@ pub async fn view_terrain(
         }
 
         let hud = format!(
-            "render: {}  |  color: {}  |  G: geometry  |  C: height  |  B: biome  |  W: warped  |  K: chaotic  |  L: legend",
+            "render: {}  |  color: {}  |  G: geometry  |  C: cycle color  |  B: toggle biome  |  W: toggle warped  |  K: toggle chaotic  |  L: legend",
             render_mode.label(),
             color_mode.label()
         );
         window.draw_text(&hud, Vec2::new(12.0, 12.0), 36.0, &font, WHITE);
 
-        if show_legend {
+        if show_legend && color_mode == TerrainColorMode::Biome {
             draw_biome_legend(&mut window, &font);
         }
     }
