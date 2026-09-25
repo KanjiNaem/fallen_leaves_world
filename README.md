@@ -1,1 +1,2 @@
-small world generation crate to create flat terrain maps using a variety of procedually generated noise functions and techniques :)
+world generation crate to create spherical hex grid terrain maps using a variety of procedually generated noise functions and techniques :)
+(used to be perlin based 2d procedural terrain gen, now 3d simplex based hydro erosion terrain gen)
