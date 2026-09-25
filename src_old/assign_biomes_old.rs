@@ -2179,7 +2179,6 @@ impl BiomeParamPresets {
                         (0.0, 5.0),
                     ),
                 );
-                // (assignment prob, highest absolute height difference, percent height (water lvl <-> top of world), percent moisture, percent rainfall, abs temp, percent magic, percent chaos, min/ max water size, min/ max ocean dist)
                 biome_params.insert(
                     Biomes::MACROTIDAL_SHINGLE_BEACH,
                     (

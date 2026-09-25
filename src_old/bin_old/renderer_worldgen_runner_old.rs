@@ -2,16 +2,17 @@
 use fallen_leaves_world::{band_influence, img_gen, terrain_renderer, world_gen_pipeline};
 use fallen_leaves_world::{spotted_influence, temperature_map};
 
-#[kiss3d::main]
+
+    #[kiss3d::main]
 async fn main() {
     let water_lvl = 220.0;
     // higher max means proportionally more moisture needed to be considered very moist
     let max_moisture = 400.0;
     let band_magic_preset = band_influence::BandInfluencePresetVals::High;
     let spotted_chaos_preset = spotted_influence::SpottedInfluencePresetVals::High;
-    let temp_preset = temperature_map::TempPresetVals::Low;
+    let temp_preset = temperature_map::TempPresetVals::Middle;
     let temp_band_noise = band_influence::BandInfluencePresetVals::VeryHighNoDisks;
-    let world_master_seed = 1;
+    let world_master_seed = 126354765869708;
 
     // assume square maps only, panic otherwise for now
     let pipeline = world_gen_pipeline::gen_world_pipeline_step_struct(

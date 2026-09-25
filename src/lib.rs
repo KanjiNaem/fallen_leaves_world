@@ -1,14 +1,5 @@
-pub mod assign_biome;
-pub mod band_influence;
+pub mod simplex_noise;
+pub mod worldgen_pipeline;
 pub mod clcg_seed_gen;
-pub mod elevation_redistrib;
 pub mod helpers;
-pub mod img_gen;
-pub mod moisture_map;
-pub mod perlin_greyscale;
-pub mod smooth_terrain;
-pub mod spotted_influence;
-pub mod temperature_map;
-pub mod terrain_renderer;
-pub mod wind_col_grad_and_local_rainfall_map_old;
-pub mod world_gen_pipeline;
+pub mod globe_renderer;
