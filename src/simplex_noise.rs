@@ -1,18 +1,20 @@
 use core::panic;
-use crate::{clcg_seed_gen::Clcg, helpers};
+use crate::clcg_seed_gen::Clcg;
 
 const SKEW_3D: f32 = 1.0 / 3.0;
 const UNSKEW_3D: f32 = 1.0 / 6.0;
 const GRAD_3D_SIMPLEX: [f32; 36] = [1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, -1.0, 0.0, -1.0, -1.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, -1.0, 0.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, -1.0, 0.0, -1.0, -1.0]; // gradients indexed via idx * 3
 
-// runs on data[0..(10 * ws + 2)]
-pub fn gen_octaved_simplex(data: &mut Vec<f32>, ws: i32, master_seed: u64, octaves: i32, mut frequency: f32, attenuation: f32, mut amplitude: f32, data_start_idx: i32, data_end_idx: i32) -> () {
+// runs on data[0..(10 * ws^2 + 2)]
+pub fn gen_octaved_simplex(data: &mut [f32], pos: &[f32], ws: i32, master_seed: u64, octaves: i32, mut frequency: f32, attenuation: f32, mut amplitude: f32, data_start_idx: i32, data_end_idx: i32) -> () {
     let n_cells = 10 * ws * ws + 2;
+    debug_assert_eq!(pos.len(), (n_cells * 3) as usize);
     let mut rng_from_seed = Clcg::new(master_seed);
 
     for _ in 0..octaves {
         for idx in 0..n_cells {
-            let cell_sphere_pos = helpers::cell_pos_on_sphere(idx, ws);
+            let o = (idx * 3) as usize;
+            let cell_sphere_pos = [pos[o], pos[o + 1], pos[o + 2]];
             let data_entry_pos = data_start_idx + idx;
             if data_entry_pos > data_end_idx {
                 // not sure aboout using a panic here, however if this fucks up everything is fucked up either way so might as well kill it here!
@@ -27,7 +29,7 @@ pub fn gen_octaved_simplex(data: &mut Vec<f32>, ws: i32, master_seed: u64, octav
     ()
 }
 
-pub fn gen_height_adj_noise(data: &mut Vec<f32>, hex_tile_count: i32, lo: f32, hi: f32, octaves: i32, amplitude: f32, attenuation: f32, data_start_idx: i32, data_end_idx: i32, start_idx_pure_noise: i32, end_idx_pure_noise: i32) -> () {
+pub fn gen_height_adj_noise(data: &mut [f32], hex_tile_count: i32, lo: f32, hi: f32, octaves: i32, amplitude: f32, attenuation: f32, data_start_idx: i32, data_end_idx: i32, start_idx_pure_noise: i32, end_idx_pure_noise: i32) -> () {
     let max_amp: f32 = (0..octaves).map(|curr| amplitude * attenuation.powi(curr)).sum();
     for curr_pure_noise_val in start_idx_pure_noise..=end_idx_pure_noise {
         let data_entry_pos = curr_pure_noise_val + hex_tile_count;
