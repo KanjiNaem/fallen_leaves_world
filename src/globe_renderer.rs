@@ -14,7 +14,44 @@ pub enum RenderMode {
     HexGlobe,
 }
 
-fn spawn_pure_simplex_view(scene: &mut SceneNode3d, pipeline: &HexWorldPipelineRenderStruct) {
+fn simplex_dots_gpu_mesh(pipeline: &HexWorldPipelineRenderStruct) -> Rc<RefCell<GpuMesh3d>> {
+    let n = pipeline.n as usize;
+    let noise_effect_coeff = 0.25;
+    let dot_size = 0.003;
+    let mut coords = Vec::with_capacity(n * 6);
+    let mut faces = Vec::with_capacity(n * 8);
+
+    for idx in pipeline.start_idx_pure_noise..=pipeline.end_idx_pure_noise {
+        let i = idx as usize;
+        let base = i * 3;
+        let x = pipeline.cell_unit_sphere_pos[base];
+        let y = pipeline.cell_unit_sphere_pos[base + 1];
+        let z = pipeline.cell_unit_sphere_pos[base + 2];
+        let r = 1.0 + noise_effect_coeff * pipeline.global_noise_data[i];
+        let cx = x * r;
+        let cy = y * r;
+        let cz = z * r;
+        let vert_idx_base = coords.len() as VertexIndex;
+        coords.push(Vec3::new(cx + dot_size, cy, cz));
+        coords.push(Vec3::new(cx - dot_size, cy, cz));
+        coords.push(Vec3::new(cx, cy + dot_size, cz));
+        coords.push(Vec3::new(cx, cy - dot_size, cz));
+        coords.push(Vec3::new(cx, cy, cz + dot_size));
+        coords.push(Vec3::new(cx, cy, cz - dot_size));
+        faces.push([vert_idx_base, vert_idx_base + 2, vert_idx_base + 4]);
+        faces.push([vert_idx_base, vert_idx_base + 4, vert_idx_base + 3]);
+        faces.push([vert_idx_base, vert_idx_base + 3, vert_idx_base + 5]);
+        faces.push([vert_idx_base, vert_idx_base + 5, vert_idx_base + 2]);
+        faces.push([vert_idx_base + 1, vert_idx_base + 4, vert_idx_base + 2]);
+        faces.push([vert_idx_base + 1, vert_idx_base + 2, vert_idx_base + 5]);
+        faces.push([vert_idx_base + 1, vert_idx_base + 5, vert_idx_base + 3]);
+        faces.push([vert_idx_base + 1, vert_idx_base + 3, vert_idx_base + 4]);
+    }
+
+    Rc::new(RefCell::new(GpuMesh3d::new(coords, faces, None, None, false)))
+}
+
+fn spawn_pure_simplex_view(scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pipeline: &HexWorldPipelineRenderStruct) {
     scene
         .add_light(
             Light::directional(Vec3::new(0.35, -1.0, 0.25))
@@ -26,20 +63,14 @@ fn spawn_pure_simplex_view(scene: &mut SceneNode3d, pipeline: &HexWorldPipelineR
         .add_light(Light::point(6.0).with_intensity(0.45))
         .set_position(Vec3::new(-2.0, 1.5, 2.5));
 
-    let noise_effect_coeff = 0.25;
-    for curr_idx in pipeline.start_idx_pure_noise..=pipeline.end_idx_pure_noise {
-        let base = curr_idx as usize * 3;
-        let [x, y, z]: [f32; 3] = pipeline.cell_unit_sphere_pos[base..base + 3]
-            .try_into()
-            .expect("cell_unit_sphere_pos stride is xyz");
-        let hex_val = pipeline.global_noise_data[curr_idx as usize];
-        let radius = 1.0 + noise_effect_coeff * hex_val;
+    let radius = pipeline.ws as f32 * 0.4;
+    *camera = OrbitCamera3d::new(Vec3::new(0.0, 0.0, 3.0 * radius), Vec3::ZERO);
 
-        scene
-            .add_sphere(0.003)
-            .set_position(Vec3::new(x * radius, y * radius, z * radius))
-            .set_color(Color::new(1.0, 1.0, 1.0, 1.0));
-    }
+    scene
+        .add_mesh(simplex_dots_gpu_mesh(pipeline), Vec3::splat(radius))
+        .set_color(Color::new(1.0, 1.0, 1.0, 1.0))
+        .set_metallic(0.0)
+        .set_roughness(0.92);
 }
 
 fn height_ramp_image() -> DynamicImage {
@@ -115,7 +146,7 @@ fn spawn_hex_globe_view(scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pip
 
 fn spawn_curr_mode(curr_mode: RenderMode, scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pipeline: &HexWorldPipelineRenderStruct) {
     match curr_mode {
-        RenderMode::PureSimplex => spawn_pure_simplex_view(scene, pipeline),
+        RenderMode::PureSimplex => spawn_pure_simplex_view(scene, camera, pipeline),
         RenderMode::HexGlobe => spawn_hex_globe_view(scene, camera, pipeline),
     }
 }

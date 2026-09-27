@@ -63,8 +63,8 @@ pub fn gen_hex_world_pipeline_struct(ws: i32, world_height: f32, master_seed: u6
     let hex_tile_count: i32 = 10 * ws * ws + 2;
     let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize]; 
     let octaves = 8;
-    let frequency= 1.0;
-    let attenuation = 1.0;
+    let frequency= 500.0;
+    let attenuation = 0.7;
     let amplitude = 1.0;
 
     // pure noise 0..(n-1)
