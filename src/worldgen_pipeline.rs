@@ -41,6 +41,20 @@
 
 use crate::{helpers, simplex_noise};
 
+pub struct HexWorldPipelinePureStruct {
+    pub ws: i32,
+    pub n: i32,
+    pub world_height: f32,
+    pub master_seed: u64,
+    pub start_idx_pure_noise: i32,
+    pub end_idx_pure_noise: i32,
+    pub start_idx_height_adj_noise: i32,
+    pub end_idx_height_adj_noise: i32,
+    pub cell_unit_sphere_pos: Vec<f32>,
+    pub neighbor_ids: Vec<i32>,
+    pub neighbor_cnt: Vec<u8>,
+    pub global_noise_data: Vec<f32>, 
+}
 pub struct HexWorldPipelineRenderStruct {
     pub ws: i32,
     pub n: i32,
@@ -59,25 +73,66 @@ pub struct HexWorldPipelineRenderStruct {
     pub global_noise_data: Vec<f32>,
 }
 
-pub fn gen_hex_world_pipeline_struct(ws: i32, world_height: f32, master_seed: u64) -> HexWorldPipelineRenderStruct {
-    let hex_tile_count: i32 = 10 * ws * ws + 2;
-    let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize]; 
+pub fn gen_hex_world_pipeline_pure_struct(ws: i32, world_height: f32, master_seed: u64) -> HexWorldPipelinePureStruct  {
+    let hex_tile_count: i32 = 10 * ws * ws + 2; 
+
+    let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
+    helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
+    
+    let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize];
     let octaves = 8;
     let frequency= 500.0;
     let attenuation = 0.7;
     let amplitude = 1.0;
-
-    // pure noise 0..(n-1)
     let start_idx_pure_noise: i32 = 0;
     let end_idx_pure_noise: i32 = hex_tile_count - 1;
+    simplex_noise::gen_octaved_simplex(&mut global_noise_data, &cell_unit_sphere_pos, ws, master_seed, octaves, frequency, attenuation, amplitude, start_idx_pure_noise, end_idx_pure_noise);
     let lo = 0.0;
     let start_idx_height_adj_noise = hex_tile_count;
     let end_idx_height_adj_noise = 2 * hex_tile_count - 1;
+    simplex_noise::gen_height_adj_noise(&mut global_noise_data, hex_tile_count, lo, world_height, octaves, amplitude, attenuation, start_idx_height_adj_noise, end_idx_height_adj_noise, start_idx_pure_noise, end_idx_pure_noise);
+    // println!("{:?}",cell_unit_sphere_pos);
+
+    let mut neighbor_ids: Vec<i32> = vec![-1; (6 * hex_tile_count) as usize];
+    let mut neighbor_cnt: Vec<u8> = vec![0; hex_tile_count as usize];
+    helpers::gen_neighbor_id_and_cnt_data(&mut neighbor_ids, &mut neighbor_cnt, &cell_unit_sphere_pos, hex_tile_count, ws);
+    // println!("{:?}",neighbor_ids);
+    // println!("{:?}",neighbor_cnt);
+
+    let n = hex_tile_count;
+    HexWorldPipelinePureStruct { 
+        ws,
+        n,
+        world_height,
+        master_seed,
+        start_idx_pure_noise,
+        end_idx_pure_noise,
+        start_idx_height_adj_noise,
+        end_idx_height_adj_noise,
+        cell_unit_sphere_pos,
+        neighbor_ids,
+        neighbor_cnt,
+        global_noise_data 
+    }
+}
+
+pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_seed: u64) -> HexWorldPipelineRenderStruct {
+    let hex_tile_count: i32 = 10 * ws * ws + 2; 
 
     let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
     helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
-
+    
+    let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize];
+    let octaves = 8;
+    let frequency= 500.0;
+    let attenuation = 0.7;
+    let amplitude = 1.0;
+    let start_idx_pure_noise: i32 = 0;
+    let end_idx_pure_noise: i32 = hex_tile_count - 1;
     simplex_noise::gen_octaved_simplex(&mut global_noise_data, &cell_unit_sphere_pos, ws, master_seed, octaves, frequency, attenuation, amplitude, start_idx_pure_noise, end_idx_pure_noise);
+    let lo = 0.0;
+    let start_idx_height_adj_noise = hex_tile_count;
+    let end_idx_height_adj_noise = 2 * hex_tile_count - 1;
     simplex_noise::gen_height_adj_noise(&mut global_noise_data, hex_tile_count, lo, world_height, octaves, amplitude, attenuation, start_idx_height_adj_noise, end_idx_height_adj_noise, start_idx_pure_noise, end_idx_pure_noise);
     // println!("{:?}",cell_unit_sphere_pos);
 

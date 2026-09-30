@@ -13,3 +13,7 @@ rayon = "1.10"
 [[bin]]
 name = "render_pipeline_struct"
 path = "src/bin/render_pipeline_struct.rs"
+
+[[bin]]
+name = "generate_pure_pipeline_struct"
+path = "src/bin/generate_pure_pipeline_struct.rs"
