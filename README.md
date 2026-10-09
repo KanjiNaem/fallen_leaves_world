@@ -1,2 +1,5 @@
 world generation crate to create spherical hex grid terrain maps using a variety of procedually generated noise functions and techniques :)
 (used to be perlin based 2d procedural terrain gen, now 3d simplex based hydro erosion terrain gen)
+
+Documentation can be found at: https://conducting.business/
+(work in progress)

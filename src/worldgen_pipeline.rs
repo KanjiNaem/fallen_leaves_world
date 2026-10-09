@@ -23,7 +23,7 @@
 //
 // pub norm_tan_height: Vec<f32>
 //[
-//  n*7: tan height in 0..1 
+//  n*7: 0-1 normalized height in 0..1 for color mapping 
 //]
 //
 // pub tri_faces_idxs: Vec<u32>
@@ -75,10 +75,6 @@ pub struct HexWorldPipelineRenderStruct {
 
 pub fn gen_hex_world_pipeline_pure_struct(ws: i32, world_height: f32, master_seed: u64) -> HexWorldPipelinePureStruct  {
     let hex_tile_count: i32 = 10 * ws * ws + 2; 
-
-    let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
-    helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
-    
     let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize];
     let octaves = 8;
     let frequency= 500.0;
@@ -86,6 +82,10 @@ pub fn gen_hex_world_pipeline_pure_struct(ws: i32, world_height: f32, master_see
     let amplitude = 1.0;
     let start_idx_pure_noise: i32 = 0;
     let end_idx_pure_noise: i32 = hex_tile_count - 1;
+
+    let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
+    helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
+    
     simplex_noise::gen_octaved_simplex(&mut global_noise_data, &cell_unit_sphere_pos, ws, master_seed, octaves, frequency, attenuation, amplitude, start_idx_pure_noise, end_idx_pure_noise);
     let lo = 0.0;
     let start_idx_height_adj_noise = hex_tile_count;
@@ -118,10 +118,6 @@ pub fn gen_hex_world_pipeline_pure_struct(ws: i32, world_height: f32, master_see
 
 pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_seed: u64) -> HexWorldPipelineRenderStruct {
     let hex_tile_count: i32 = 10 * ws * ws + 2; 
-
-    let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
-    helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
-    
     let mut global_noise_data: Vec<f32> = vec![0.0; (2 * hex_tile_count) as usize];
     let octaves = 8;
     let frequency= 500.0;
@@ -129,6 +125,10 @@ pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_s
     let amplitude = 1.0;
     let start_idx_pure_noise: i32 = 0;
     let end_idx_pure_noise: i32 = hex_tile_count - 1;
+
+    let mut cell_unit_sphere_pos: Vec<f32> = vec![0.0; (3 * hex_tile_count) as usize];
+    helpers::gen_cell_unit_sphere_pos_data(&mut cell_unit_sphere_pos, hex_tile_count, ws);
+    
     simplex_noise::gen_octaved_simplex(&mut global_noise_data, &cell_unit_sphere_pos, ws, master_seed, octaves, frequency, attenuation, amplitude, start_idx_pure_noise, end_idx_pure_noise);
     let lo = 0.0;
     let start_idx_height_adj_noise = hex_tile_count;
@@ -145,7 +145,7 @@ pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_s
     let mut hex_verts: Vec<f32> = vec![0.0; (7 * 3 * hex_tile_count) as usize];
     let mut norm_tan_height: Vec<f32> = vec![0.0; (7 * hex_tile_count) as usize];
     let mut tri_faces_idxs: Vec<u32> = vec![0; (6 * 3 * hex_tile_count) as usize];
-    helpers::gen_hex_vert_and_norm_tan_and_tri_faces_data(&global_noise_data, &mut hex_verts, &mut norm_tan_height, &mut tri_faces_idxs, &cell_unit_sphere_pos, &neighbor_ids, &neighbor_cnt, hex_tile_count, ws, world_height);
+    helpers::gen_hex_vert_and_norm_tan_and_tri_faces_data(&global_noise_data, &mut hex_verts, &mut norm_tan_height, &mut tri_faces_idxs, &cell_unit_sphere_pos, &neighbor_ids, &neighbor_cnt, hex_tile_count, world_height);
     // println!("{:?}", hex_verts);
     // println!("{:?}", norm_tan_height);
     // println!("{:?}", tri_faces);

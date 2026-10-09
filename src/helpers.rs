@@ -60,12 +60,12 @@ fn add3(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
 
 
 fn north_verts(k: i32) -> [f32; 3] {
-    let a = std::f32::consts::TAU * (k.rem_euclid(5) as f32) / 5.0;
+    let a = std::f32::consts::TAU * k as f32 / 5.0;
     [ICO_R * a.cos(), ICO_R * a.sin(), ICO_Z]
 }
 
 fn south_verts(k: i32) -> [f32; 3] {
-    let a = std::f32::consts::TAU * (k.rem_euclid(5) as f32) / 5.0 + std::f32::consts::TAU / 10.0;
+    let a = std::f32::consts::TAU * k as f32 / 5.0 + std::f32::consts::TAU / 10.0;
     [ICO_R * a.cos(), ICO_R * a.sin(), -ICO_Z]
 }
 
@@ -85,10 +85,10 @@ fn ico_positions() -> [[f32; 3]; 12] {
 fn ico_faces() -> [[usize; 3]; 20] {
     let mut faces = [[0usize; 3]; 20];
     for i in 0..5 {
-        faces[i] = [0, 1 + i, 1 + (i + 1) % 5];
-        faces[5 + i] = [1 + i, 1 + (i + 1) % 5, 6 + i];
-        faces[10 + i] = [1 + i, 6 + i, 6 + (i + 4) % 5];
-        faces[15 + i] = [11, 6 + i, 6 + (i + 4) % 5];
+        faces[i] = [0, 1 + i, 1 + ((i + 1) % 5)];
+        faces[5 + i] = [1 + i, 1 + ((i + 1) % 5), 6 + i];
+        faces[10 + i] = [1 + i, 6 + i, 6 + ((i + 4) % 5)];
+        faces[15 + i] = [11, 6 + i, 6 + ((i + 4) % 5)];
     }
     faces
 }
@@ -370,7 +370,7 @@ pub fn vec_to_cell_idx(x: f32, y: f32, z: f32, pos: &[f32], n: i32) -> i32 {
     best
 }
 
-pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_vert_data_arr: &mut [f32], norm_tan_data_arr: &mut [f32], tri_faces_data_array: &mut [u32], cell_unit_sphere_pos: &[f32], neighbor_ids: &[i32], neighbor_cnt: &[u8], n: i32, ws: i32, world_height: f32) -> () {
+pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_vert_data_arr: &mut [f32], norm_tan_data_arr: &mut [f32], tri_faces_data_array: &mut [u32], cell_unit_sphere_pos: &[f32], neighbor_ids: &[i32], neighbor_cnt: &[u8], n: i32, world_height: f32) -> () {
     let n = n as usize;
     let lo = 0.0;
     for curr_idx in 0..n {
@@ -384,7 +384,6 @@ pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_ver
         let neighbor_basis = curr_idx * 6;
         let curr_neighbor_cnt = neighbor_cnt[curr_idx] as usize;
         let radius = 1.0;
-        let _ = ws;
 
         let center = read_pos_xyz(cell_unit_sphere_pos, curr_idx as i32);
         let scaled_center = scale_vec3(center, radius);
