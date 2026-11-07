@@ -162,9 +162,9 @@ fn edge_raw(u: usize, v: usize, weight_u: i32, n: i32, edges: &[(usize, usize); 
 }
 
 fn bary_to_raw(
-    i0: usize,
-    i1: usize,
-    i2: usize,
+    iv_idx0: usize,
+    iv_idx1: usize,
+    iv_idx2: usize,
     a: i32,
     b: i32,
     c: i32,
@@ -173,22 +173,22 @@ fn bary_to_raw(
     edges: &[(usize, usize); 30],
 ) -> i32 {
     if a == n {
-        return i0 as i32;
+        return iv_idx0 as i32;
     }
     if b == n {
-        return i1 as i32;
+        return iv_idx1 as i32;
     }
     if c == n {
-        return i2 as i32;
+        return iv_idx2 as i32;
     }
     if c == 0 {
-        return edge_raw(i0, i1, a, n, edges);
+        return edge_raw(iv_idx0, iv_idx1, a, n, edges);
     }
     if b == 0 {
-        return edge_raw(i0, i2, a, n, edges);
+        return edge_raw(iv_idx0, iv_idx2, a, n, edges);
     }
     if a == 0 {
-        return edge_raw(i1, i2, b, n, edges);
+        return edge_raw(iv_idx1, iv_idx2, b, n, edges);
     }
     let interiors = (n - 1) * (n - 2) / 2;
     12 + 30 * (n - 1) + (face_i as i32) * interiors + interior_index(a, b, n)
@@ -231,42 +231,42 @@ fn pos_from_raw(
         return ico_verts[raw as usize];
     }
 
-    let edge_n = if seg_freq > 1 { 30 * (seg_freq - 1) } else { 0 };
-    if raw < 12 + edge_n {
-        let e = (raw - 12) / (seg_freq - 1);
-        let steps = (raw - 12) % (seg_freq - 1) + 1;
-        let (v0, v1) = edges[e as usize];
+    let edge_hex_cnt = if seg_freq > 1 { 30 * (seg_freq - 1) } else { 0 };
+    if raw < 12 + edge_hex_cnt {
+        let ico_edge_idx = (raw - 12) / (seg_freq - 1);
+        let edge_steps = (raw - 12) % (seg_freq - 1) + 1;
+        let (v0, v1) = edges[ico_edge_idx as usize];
         return normalize_vec3(add_vec3(
-            scale_vec3(ico_verts[v0], (seg_freq - steps) as f32),
-            scale_vec3(ico_verts[v1], steps as f32),
+            scale_vec3(ico_verts[v0], (seg_freq - edge_steps) as f32),
+            scale_vec3(ico_verts[v1], edge_steps as f32),
         ));
     }
 
-    let interiors = (seg_freq - 1) * (seg_freq - 2) / 2;
-    let fi = (raw - 12 - edge_n) / interiors;
-    let local = (raw - 12 - edge_n) % interiors;
+    let ico_face_hex_cnt = (seg_freq - 1) * (seg_freq - 2) / 2;
+    let face_id = (raw - 12 - edge_hex_cnt) / ico_face_hex_cnt;
+    let local = (raw - 12 - edge_hex_cnt) % ico_face_hex_cnt;
     let (a, b, c) = interior_abc(local, seg_freq);
-    let [i0, i1, i2] = faces[fi as usize];
+    let [iv_idx0, iv_idx1, iv_idx2] = faces[face_id as usize];
     normalize_vec3(add3(
-        scale_vec3(ico_verts[i0], a as f32),
-        scale_vec3(ico_verts[i1], b as f32),
-        scale_vec3(ico_verts[i2], c as f32),
+        scale_vec3(ico_verts[iv_idx0], a as f32),
+        scale_vec3(ico_verts[iv_idx1], b as f32),
+        scale_vec3(ico_verts[iv_idx2], c as f32),
     ))
 }
 
-fn push_neighbor(n_ids: &mut [i32], n_cnt: &mut [u8], n1_id: i32, n2_id: i32) {
-    if n1_id == n2_id {
+fn push_neighbor(neighbor_ids: &mut [i32], neighbor_cnt: &mut [u8], idx_1: i32, idx_2: i32) {
+    if idx_1 == idx_2 {
         return;
     }
-    let base = (n1_id * 6) as usize;
-    let n1_ncnt = n_cnt[n1_id as usize] as usize;
+    let base = (idx_1 * 6) as usize;
+    let n1_ncnt = neighbor_cnt[idx_1 as usize] as usize;
     for i in 0..n1_ncnt {
-        if n_ids[base + i] == n2_id {
+        if neighbor_ids[base + i] == idx_2 {
             return;
         }
     }
-    n_ids[base + n1_ncnt] = n2_id;
-    n_cnt[n1_id as usize] = (n1_ncnt + 1) as u8;
+    neighbor_ids[base + n1_ncnt] = idx_2;
+    neighbor_cnt[idx_1 as usize] = (n1_ncnt + 1) as u8;
 }
 
 fn sort_ring_angular_soa(pos: &[f32], center_idx: i32, n_ids: &mut [i32]) {
@@ -288,6 +288,55 @@ pub fn cell_pos_on_sphere(idx: i32, ws: i32) -> [f32; 3] {
     pos_from_raw(idx_to_raw(idx, ws), ws, &ico, &faces, &edges)
 }
 
+fn ico_face_of_raw(raw: i32, ws: i32, faces: &[[usize; 3]; 20], edges: &[(usize, usize); 30]) -> usize {
+    if raw < 12 {
+        let v = raw as usize;
+        return faces
+            .iter()
+            .position(|f| f[0] == v || f[1] == v || f[2] == v)
+            .unwrap();
+    }
+    let edge_n = if ws > 1 { 30 * (ws - 1) } else { 0 };
+    if raw < 12 + edge_n {
+        let e = (raw - 12) / (ws - 1);
+        let (v0, v1) = edges[e as usize];
+        return faces
+            .iter()
+            .position(|f| {
+                (f[0] == v0 || f[1] == v0 || f[2] == v0) && (f[0] == v1 || f[1] == v1 || f[2] == v1)
+            })
+            .unwrap();
+    }
+    let interiors = (ws - 1) * (ws - 2) / 2;
+    ((raw - 12 - edge_n) / interiors) as usize
+}
+
+pub fn ico_face_normals() -> [[f32; 3]; 20] {
+    let verts = ico_positions();
+    let faces = ico_faces();
+    let mut normals = [[0.0; 3]; 20];
+    for i in 0..20 {
+        let a = verts[faces[i][0]];
+        let b = verts[faces[i][1]];
+        let c = verts[faces[i][2]];
+        let mut n = cross_vec3(sub_vec3(b, a), sub_vec3(c, a));
+        if dot_vec3(n, a) < 0.0 {
+            n = scale_vec3(n, -1.0);
+        }
+        normals[i] = normalize_vec3(n);
+    }
+    normals
+}
+
+pub fn gen_cell_ico_face_data(face: &mut [u8], n: i32, ws: i32) {
+    debug_assert_eq!(face.len(), n as usize);
+    let faces = ico_faces();
+    let edges = ico_edges();
+    for idx in 0..n {
+        face[idx as usize] = ico_face_of_raw(idx_to_raw(idx, ws), ws, &faces, &edges) as u8;
+    }
+}
+
 pub fn gen_cell_unit_sphere_pos_data(data_arr: &mut [f32], n: i32, ws: i32) -> () {
     debug_assert_eq!(n, 10 * ws * ws + 2);
     debug_assert_eq!(data_arr.len(), (n * 3) as usize);
@@ -303,17 +352,15 @@ pub fn gen_cell_unit_sphere_pos_data(data_arr: &mut [f32], n: i32, ws: i32) -> (
     }
 }
 
-// TODO: make this one more readable i hate using single letter vars
 pub fn gen_neighbor_id_and_cnt_data(
-    id_data_arr: &mut [i32],
-    cnt_data_arr: &mut [u8],
-    pos: &[f32],
+    neighbor_ids: &mut [i32],
+    neighbor_cnt: &mut [u8],
+    unit_cell_pos: &[f32],
     n: i32,
     ws: i32,
 ) -> () {
-    // debug_assert_eq!(n, 10 * ws * ws + 2);
-    id_data_arr.fill(-1);
-    cnt_data_arr.fill(0);
+    neighbor_ids.fill(-1);
+    neighbor_cnt.fill(0);
 
     let faces = ico_faces();
     let edges = ico_edges();
@@ -327,29 +374,29 @@ pub fn gen_neighbor_id_and_cnt_data(
     ];
 
     for (face_i, face) in faces.iter().enumerate() {
-        let (i0, i1, i2) = (face[0], face[1], face[2]);
+        let (iv_idx0, iv_idx1, iv_idx2) = (face[0], face[1], face[2]);
         for a in 0..=ws {
             for b in 0..=(ws - a) {
                 let c = ws - a - b;
-                let id = raw_to_idx(bary_to_raw(i0, i1, i2, a, b, c, ws, face_i, &edges), ws);
-                for (da, db, dc) in steps {
-                    let (a2, b2, c2) = (a + da, b + db, c + dc);
+                let id = raw_to_idx(bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a, b, c, ws, face_i, &edges), ws);
+                for (dif_a, dif_b, dif_c) in steps {
+                    let (a2, b2, c2) = (a + dif_a, b + dif_b, c + dif_c);
                     if a2 < 0 || b2 < 0 || c2 < 0 || a2 + b2 + c2 != ws {
                         continue;
                     }
-                    let id2 = raw_to_idx(bary_to_raw(i0, i1, i2, a2, b2, c2, ws, face_i, &edges), ws);
-                    push_neighbor(id_data_arr, cnt_data_arr, id, id2);
-                    push_neighbor(id_data_arr, cnt_data_arr, id2, id);
+                    let id2 = raw_to_idx(bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a2, b2, c2, ws, face_i, &edges), ws);
+                    push_neighbor(neighbor_ids, neighbor_cnt, id, id2);
+                    push_neighbor(neighbor_ids, neighbor_cnt, id2, id);
                 }
             }
         }
     }
 
     for idx in 0..n {
-        let cnt = cnt_data_arr[idx as usize] as usize;
+        let cnt = neighbor_cnt[idx as usize] as usize;
         debug_assert!(cnt <= 6);
         let base = (idx * 6) as usize;
-        sort_ring_angular_soa(pos, idx, &mut id_data_arr[base..base + cnt]);
+        sort_ring_angular_soa(unit_cell_pos, idx, &mut neighbor_ids[base..base + cnt]);
     }
 }
 
