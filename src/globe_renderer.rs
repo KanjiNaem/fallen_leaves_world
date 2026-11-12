@@ -14,6 +14,8 @@ const DETAIL_SHELL: f32 = 1.0002;
 const CHUNK_COUNT: usize = 20;
 const SPIN_STEP: f32 = 0.005;
 const DIST_STEP: f32 = 1.01;
+const HOVER_EDGE_SHELL: f32 = 1.002;
+const HOVER_TEXT_SCALE: f32 = 48.0;
 
 #[derive(Default, Copy, Clone, PartialEq)]
 pub enum RenderMode {
@@ -45,6 +47,7 @@ enum ActiveView {
 struct LiveView {
     rig: SceneNode3d,
     kind: ActiveView,
+    hover_cell: Option<i32>,
 }
 
 struct GlobeCamera<'a> {
@@ -157,7 +160,15 @@ impl<'a> Camera3d for GlobeCamera<'a> {
     fn update(&mut self, canvas: &Canvas) {
         self.orbit.update(canvas);
         let eye = self.orbit.eye();
-        sync_view(&mut self.view.borrow_mut(), eye, self.pipeline);
+        let pick = if self.seen_cursor {
+            let (w, h) = canvas.size();
+            Some(self.unproject(self.cursor, Vec2::new(w as f32, h as f32)))
+        } else {
+            None
+        };
+        let mut view = self.view.borrow_mut();
+        sync_view(&mut view, eye, self.pipeline);
+        sync_hover(&mut view, pick, self.pipeline);
     }
 
     fn view_transform_pair(&self, pass: usize) -> (Pose3, Mat4) {
@@ -557,8 +568,74 @@ fn cull_hex_chunks(chunks: &mut HexChunks, eye: Vec3, rot: Quat) {
     }
 }
 
+fn ray_sphere(origin: Vec3, dir: Vec3, radius: f32) -> Option<Vec3> {
+    let a = dir.dot(dir);
+    let b = 2.0 * origin.dot(dir);
+    let c = origin.dot(origin) - radius * radius;
+    let disc = b * b - 4.0 * a * c;
+    if disc < 0.0 || a == 0.0 {
+        return None;
+    }
+    let root = disc.sqrt();
+    let t0 = (-b - root) / (2.0 * a);
+    let t1 = (-b + root) / (2.0 * a);
+    let t = if t0 >= 0.0 { t0 } else { t1 };
+    if t < 0.0 {
+        return None;
+    }
+    Some(origin + dir * t)
+}
+
+fn hovered_hex(
+    view: &LiveView,
+    origin: Vec3,
+    dir: Vec3,
+    pipeline: &HexWorldPipelineRenderStruct,
+) -> Option<i32> {
+    if !matches!(view.kind, ActiveView::Hex(_)) {
+        return None;
+    }
+    let hit = ray_sphere(origin, dir, globe_radius(pipeline))?;
+    let local = view.rig.inverse_rotation().mul_vec3(hit);
+    Some(helpers::nearest_cell_idx(
+        local.x,
+        local.y,
+        local.z,
+        &pipeline.cell_unit_sphere_pos,
+        pipeline.ws,
+    ))
+}
+
+fn hex_boundary(pipeline: &HexWorldPipelineRenderStruct, cell: i32, rot: Quat) -> Polyline3d {
+    let cell = cell as usize;
+    let cnt = pipeline.neighbor_cnt[cell] as usize;
+    let verts = &pipeline.hex_verts;
+    let radius = globe_radius(pipeline) * HOVER_EDGE_SHELL;
+    let mut vertices = Vec::with_capacity(cnt + 1);
+    for i in 0..cnt {
+        let o = (cell * 7 + 1 + i) * 3;
+        let corner = Vec3::new(verts[o], verts[o + 1], verts[o + 2]) * radius;
+        vertices.push(rot.mul_vec3(corner));
+    }
+    if let Some(first) = vertices.first().copied() {
+        vertices.push(first);
+    }
+    Polyline3d::new(vertices)
+        .with_color(RED)
+        .with_width(2.0)
+        .with_depth_bias(0.004)
+}
+
+fn sync_hover(
+    view: &mut LiveView,
+    pick: Option<(Vec3, Vec3)>,
+    pipeline: &HexWorldPipelineRenderStruct,
+) {
+    view.hover_cell = pick.and_then(|(origin, dir)| hovered_hex(view, origin, dir, pipeline));
+}
+
 fn sync_view(view: &mut LiveView, eye: Vec3, pipeline: &HexWorldPipelineRenderStruct) {
-    let LiveView { rig, kind } = view;
+    let LiveView { rig, kind, .. } = view;
     if let ActiveView::Hex(chunks) = kind {
         cull_hex_chunks(chunks, eye, rig.rotation());
         if let Some(lod) = &mut chunks.detail {
@@ -585,7 +662,11 @@ fn open_view(
         }
         RenderMode::HexGlobe => ActiveView::Hex(spawn_hex_globe_view(&mut rig, pipeline)),
     };
-    LiveView { rig, kind }
+    LiveView {
+        rig,
+        kind,
+        hover_cell: None,
+    }
 }
 
 pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
@@ -595,11 +676,13 @@ pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
     let view = Rc::new(RefCell::new(LiveView {
         rig: SceneNode3d::empty(),
         kind: ActiveView::Simplex,
+        hover_cell: None,
     }));
     let mut camera = GlobeCamera::new(radius, view.clone(), pipeline);
     let mut scene = SceneNode3d::empty();
     let mut render_mode = RenderMode::HexGlobe;
     *view.borrow_mut() = open_view(&mut scene, render_mode, pipeline);
+    let font = Font::default();
 
     let switch_render_mode = |curr_mode: RenderMode| {
         if curr_mode == RenderMode::PureSimplex {
@@ -617,6 +700,15 @@ pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
                 camera.frame_radius(radius);
                 *view.borrow_mut() = open_view(&mut scene, render_mode, pipeline);
             }
+        }
+        if let Some(cell) = view.borrow().hover_cell {
+            let rot = view.borrow().rig.rotation();
+            let boundary = hex_boundary(pipeline, cell, rot);
+            window.draw_polyline(&boundary);
+            let label = cell.to_string();
+            let advance = 0.56 * HOVER_TEXT_SCALE * label.len() as f32;
+            let x = (window.width() as f32 - advance - 18.0).max(8.0);
+            window.draw_text(&label, Vec2::new(x, 16.0), HOVER_TEXT_SCALE, &font, RED);
         }
     }
 }
