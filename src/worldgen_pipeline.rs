@@ -21,7 +21,7 @@
 //  n*7*3: verts of hexes (last entries unused for pents);; (center + 6 corners) * xyz 
 //]
 //
-// pub norm_tan_height: Vec<f32>
+// pub norm_height: Vec<f32>
 //[
 //  n*7: 0-1 normalized height in 0..1 for color mapping 
 //]
@@ -29,7 +29,7 @@
 // pub tri_faces_idxs: Vec<u32>
 //[
 //  n*6*3: 6 tri idxs in hex verts;; -last unused for missing tri of pent
-//  vert v is at hex_verts[v*3..v*3+3] for v = idx*7 + local
+//  vert v is at hex_verts[v*3..v*3+2] for v = idx*7 + local
 //]
 //
 // global data: Vec<i32>
@@ -68,7 +68,7 @@ pub struct HexWorldPipelineRenderStruct {
     pub neighbor_ids: Vec<i32>,
     pub neighbor_cnt: Vec<u8>,
     pub hex_verts: Vec<f32>,
-    pub norm_tan_height: Vec<f32>,
+    pub norm_height: Vec<f32>,
     pub tri_faces_idxs: Vec<u32>,
     pub global_noise_data: Vec<f32>,
 }
@@ -143,9 +143,9 @@ pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_s
     // println!("{:?}",neighbor_cnt);
 
     let mut hex_verts: Vec<f32> = vec![0.0; (7 * 3 * hex_tile_count) as usize];
-    let mut norm_tan_height: Vec<f32> = vec![0.0; (7 * hex_tile_count) as usize];
+    let mut norm_height: Vec<f32> = vec![0.0; (7 * hex_tile_count) as usize];
     let mut tri_faces_idxs: Vec<u32> = vec![0; (6 * 3 * hex_tile_count) as usize];
-    helpers::gen_hex_vert_and_norm_tan_and_tri_faces_data(&global_noise_data, &mut hex_verts, &mut norm_tan_height, &mut tri_faces_idxs, &cell_unit_sphere_pos, &neighbor_ids, &neighbor_cnt, hex_tile_count, world_height);
+    helpers::gen_hex_vert_and_norm_height_and_tri_faces_data(&global_noise_data, &mut hex_verts, &mut norm_height, &mut tri_faces_idxs, &cell_unit_sphere_pos, &neighbor_ids, &neighbor_cnt, hex_tile_count, world_height);
     // println!("{:?}", hex_verts);
     // println!("{:?}", norm_tan_height);
     // println!("{:?}", tri_faces);
@@ -164,7 +164,7 @@ pub fn gen_hex_world_pipeline_render_struct(ws: i32, world_height: f32, master_s
         neighbor_ids,
         neighbor_cnt,
         hex_verts,
-        norm_tan_height,
+        norm_height,
         tri_faces_idxs,
         global_noise_data,
     }

@@ -417,13 +417,13 @@ pub fn vec_to_cell_idx(x: f32, y: f32, z: f32, pos: &[f32], n: i32) -> i32 {
     best
 }
 
-pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_vert_data_arr: &mut [f32], norm_tan_data_arr: &mut [f32], tri_faces_data_array: &mut [u32], cell_unit_sphere_pos: &[f32], neighbor_ids: &[i32], neighbor_cnt: &[u8], n: i32, world_height: f32) -> () {
+pub fn gen_hex_vert_and_norm_height_and_tri_faces_data(global_data: &[f32], hex_vert_data_arr: &mut [f32], norm_height_data_arr: &mut [f32], tri_faces_data_array: &mut [u32], cell_unit_sphere_pos: &[f32], neighbor_ids: &[i32], neighbor_cnt: &[u8], n: i32, world_height: f32) -> () {
     let n = n as usize;
     let lo = 0.0;
     for curr_idx in 0..n {
         let height_idx = n + curr_idx;
         let curr_height = global_data[height_idx];
-        let tangent = ((curr_height - lo) / (world_height - lo)).clamp(0.0, 1.0);
+        let norm_height = ((curr_height - lo) / (world_height - lo)).clamp(0.0, 1.0);
         
         let total_vert_basis = curr_idx * 21;
         let uvs_basis = curr_idx * 7; 
@@ -437,12 +437,12 @@ pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_ver
         hex_vert_data_arr[total_vert_basis] = scaled_center[0];
         hex_vert_data_arr[total_vert_basis + 1] = scaled_center[1];
         hex_vert_data_arr[total_vert_basis + 2] = scaled_center[2];
-        norm_tan_data_arr[uvs_basis] = tangent;
+        norm_height_data_arr[uvs_basis] = norm_height;
 
         for i in 0..curr_neighbor_cnt {
-            let n_a = neighbor_ids[neighbor_basis + i] as usize;
-            let n_b = neighbor_ids[neighbor_basis + (i + 1) % curr_neighbor_cnt] as usize;
-            let mut triple = [curr_idx, n_a, n_b];
+            let neighbor_a = neighbor_ids[neighbor_basis + i] as usize;
+            let neighbor_b = neighbor_ids[neighbor_basis + (i + 1) % curr_neighbor_cnt] as usize;
+            let mut triple = [curr_idx, neighbor_a, neighbor_b];
             triple.sort_unstable();
             let corner = scale_vec3(
                 normalize_vec3(add3(
@@ -457,7 +457,7 @@ pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_ver
             hex_vert_data_arr[adj_vert_basis] = corner[0];
             hex_vert_data_arr[adj_vert_basis + 1] = corner[1];
             hex_vert_data_arr[adj_vert_basis + 2] = corner[2];
-            norm_tan_data_arr[uvs_basis + 1 + i] = tangent;
+            norm_height_data_arr[uvs_basis + 1 + i] = norm_height;
         }
 
         let hex_vert_basis = (curr_idx * 7) as u32;
@@ -491,6 +491,6 @@ pub fn gen_hex_vert_and_norm_tan_and_tri_faces_data(global_data: &[f32], hex_ver
             tri_faces_data_array[faces_basis + i * 3 + 1] = i1;
             tri_faces_data_array[faces_basis + i * 3 + 2] = i2;
         }
-
+    
     }
 }

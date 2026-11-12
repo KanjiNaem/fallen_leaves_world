@@ -129,7 +129,7 @@ fn push_gpu_mesh(coords: Vec<Vec3>, faces: Vec<[VertexIndex; 3]>, uvs: Vec<Vec2>
 fn hex_fan_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8]) -> [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT] {
     let n = pipeline.n as usize;
     let verts = &pipeline.hex_verts;
-    let tans = &pipeline.norm_tan_height;
+    let tans = &pipeline.norm_height;
     let idx = &pipeline.tri_faces_idxs;
     let mut coords = vec![Vec::new(); CHUNK_COUNT];
     let mut uvs = vec![Vec::new(); CHUNK_COUNT];
@@ -230,7 +230,7 @@ fn compact_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8
                         pipeline.cell_unit_sphere_pos[o + 1],
                         pipeline.cell_unit_sphere_pos[o + 2],
                     ));
-                    uvs.push(Vec2::new(pipeline.norm_tan_height[v * 7], 0.5));
+                    uvs.push(Vec2::new(pipeline.norm_height[v * 7], 0.5));
                 }
                 out[k] = remap[v] as VertexIndex;
             }
