@@ -1,4 +1,5 @@
 use image::{DynamicImage, ImageBuffer, Rgb};
+use kiss3d::glamx::Mat4;
 use kiss3d::prelude::*;
 use kiss3d::resource::TextureManager;
 use kiss3d::resource::vertex_index::VertexIndex;
@@ -7,8 +8,12 @@ use crate::helpers;
 use crate::worldgen_pipeline::HexWorldPipelineRenderStruct;
 
 const HEIGHT_RAMP_TEX: &str = "hex_height_ramp";
-const HEX_FAN_MAX_WS: i32 = 80;
+const HEX_FAN_MAX_WS: i32 = 200;
+const DETAIL_HEX_RADIUS: i32 = 150;
+const DETAIL_SHELL: f32 = 1.0002;
 const CHUNK_COUNT: usize = 20;
+const SPIN_STEP: f32 = 0.005;
+const DIST_STEP: f32 = 1.01;
 
 #[derive(Default, Copy, Clone, PartialEq)]
 pub enum RenderMode {
@@ -20,6 +25,16 @@ pub enum RenderMode {
 struct HexChunks {
     nodes: [SceneNode3d; CHUNK_COUNT],
     normals: [[f32; 3]; CHUNK_COUNT],
+    detail: Option<DetailLod>,
+}
+
+struct DetailLod {
+    node: Option<SceneNode3d>,
+    center: i32,
+    seen: Vec<u32>,
+    seen_gen: u32,
+    order: Vec<i32>,
+    dist: Vec<u16>,
 }
 
 enum ActiveView {
@@ -27,28 +42,160 @@ enum ActiveView {
     Hex(HexChunks),
 }
 
+struct LiveView {
+    rig: SceneNode3d,
+    kind: ActiveView,
+}
+
+struct GlobeCamera<'a> {
+    orbit: OrbitCamera3d,
+    dragging: bool,
+    seen_cursor: bool,
+    cursor: Vec2,
+    view: Rc<RefCell<LiveView>>,
+    pipeline: &'a HexWorldPipelineRenderStruct,
+}
+
+impl<'a> GlobeCamera<'a> {
+    fn new(
+        radius: f32,
+        view: Rc<RefCell<LiveView>>,
+        pipeline: &'a HexWorldPipelineRenderStruct,
+    ) -> Self {
+        let eye_z = 3.0 * radius;
+        let znear = (radius * 0.02).max(0.01);
+        let zfar = (radius * 80.0).max(1000.0);
+        let mut orbit = OrbitCamera3d::new_with_frustum(
+            std::f32::consts::FRAC_PI_4,
+            znear,
+            zfar,
+            Vec3::new(0.0, 0.0, eye_z),
+            Vec3::ZERO,
+        );
+        orbit.rebind_rotate_button(None);
+        orbit.rebind_drag_button(None);
+        orbit.rebind_reset_key(None);
+        let mut camera = Self {
+            orbit,
+            dragging: false,
+            seen_cursor: false,
+            cursor: Vec2::ZERO,
+            view,
+            pipeline,
+        };
+        camera.frame_radius(radius);
+        camera
+    }
+
+    fn frame_radius(&mut self, radius: f32) {
+        let eye_z = 3.0 * radius;
+        self.orbit.set_min_dist(radius * 1.25);
+        self.orbit.set_max_dist(radius * 40.0);
+        self.orbit.set_dist(eye_z);
+        self.orbit.set_at(Vec3::ZERO);
+    }
+
+    fn spin(&mut self, delta: Vec2) {
+        let spin =
+            Quat::from_rotation_y(delta.x * SPIN_STEP) * Quat::from_rotation_x(delta.y * SPIN_STEP);
+        let mut view = self.view.borrow_mut();
+        view.rig.rotate(spin);
+        view.rig.set_position(Vec3::ZERO);
+    }
+}
+
+impl<'a> Camera3d for GlobeCamera<'a> {
+    fn handle_event(&mut self, canvas: &Canvas, event: &WindowEvent) {
+        match *event {
+            WindowEvent::Scroll(_, off, _) => {
+                self.orbit
+                    .set_dist(self.orbit.dist() * DIST_STEP.powf(off as f32));
+                self.orbit.set_at(Vec3::ZERO);
+            }
+            WindowEvent::FramebufferSize(_, _) => {
+                self.orbit.handle_event(canvas, event);
+                self.orbit.set_at(Vec3::ZERO);
+            }
+            WindowEvent::MouseButton(MouseButton::Button1, Action::Press, _) => {
+                self.dragging = true;
+            }
+            WindowEvent::MouseButton(MouseButton::Button1, Action::Release, _) => {
+                self.dragging = false;
+            }
+            WindowEvent::CursorPos(x, y, _) => {
+                let curr = Vec2::new(x as f32, y as f32);
+                if self.dragging && self.seen_cursor {
+                    self.spin(curr - self.cursor);
+                }
+                self.cursor = curr;
+                self.seen_cursor = true;
+            }
+            _ => {}
+        }
+    }
+
+    fn eye(&self) -> Vec3 {
+        self.orbit.eye()
+    }
+
+    fn view_transform(&self) -> Pose3 {
+        self.orbit.view_transform()
+    }
+
+    fn transformation(&self) -> Mat4 {
+        self.orbit.transformation()
+    }
+
+    fn inverse_transformation(&self) -> Mat4 {
+        self.orbit.inverse_transformation()
+    }
+
+    fn clip_planes(&self) -> (f32, f32) {
+        self.orbit.clip_planes()
+    }
+
+    fn update(&mut self, canvas: &Canvas) {
+        self.orbit.update(canvas);
+        let eye = self.orbit.eye();
+        sync_view(&mut self.view.borrow_mut(), eye, self.pipeline);
+    }
+
+    fn view_transform_pair(&self, pass: usize) -> (Pose3, Mat4) {
+        self.orbit.view_transform_pair(pass)
+    }
+}
+
 fn globe_radius(pipeline: &HexWorldPipelineRenderStruct) -> f32 {
     pipeline.ws as f32 * 0.4
 }
 
-fn orbit_camera(eye_z: f32) -> OrbitCamera3d {
-    OrbitCamera3d::new_with_frustum(std::f32::consts::FRAC_PI_4, 0.1, (eye_z * 8.0).max(1000.0), Vec3::new(0.0, 0.0, eye_z), Vec3::ZERO)
+fn add_globe_lights(scene: &mut SceneNode3d) {
+    let key = Vec3::new(0.35, -1.0, 0.25);
+    let color = Color::new(1.0, 1.0, 1.0, 1.0);
+    scene.add_light(
+        Light::directional(key)
+            .with_intensity(0.6)
+            .with_color(color),
+    );
+    scene.add_light(
+        Light::directional(-key)
+            .with_intensity(0.6)
+            .with_color(color),
+    );
 }
 
-fn add_globe_lights(scene: &mut SceneNode3d) {
-    scene
-        .add_light(
-            Light::directional(Vec3::new(0.35, -1.0, 0.25))
-                .with_intensity(10.0)
-                .with_color(Color::new(1.0, 1.0, 1.0, 1.0)),
-        )
-        .set_position(Vec3::new(0.0, 3.0, 0.0));
+fn style_hex_node(node: &mut SceneNode3d) {
+    node.set_color(Color::new(1.0, 1.0, 1.0, 1.0))
+        .set_metallic(0.0)
+        .set_roughness(0.92)
+        .enable_backface_culling(true)
+        .set_texture_with_name(HEIGHT_RAMP_TEX);
 }
 
 fn simplex_dots_gpu_mesh(pipeline: &HexWorldPipelineRenderStruct) -> Rc<RefCell<GpuMesh3d>> {
     let n = pipeline.n as usize;
     let noise_effect_coeff = 0.25;
-    let dot_size = 0.003;
+    let dot_size = 0.05 / pipeline.ws as f32;
     let mut coords = Vec::with_capacity(n * 6);
     let mut faces = Vec::with_capacity(n * 8);
 
@@ -79,34 +226,35 @@ fn simplex_dots_gpu_mesh(pipeline: &HexWorldPipelineRenderStruct) -> Rc<RefCell<
         faces.push([vert_idx_base + 1, vert_idx_base + 3, vert_idx_base + 4]);
     }
 
-    Rc::new(RefCell::new(GpuMesh3d::new(coords, faces, None, None, false)))
+    Rc::new(RefCell::new(GpuMesh3d::new(
+        coords, faces, None, None, false,
+    )))
 }
 
-fn spawn_pure_simplex_view(scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pipeline: &HexWorldPipelineRenderStruct) {
-    add_globe_lights(scene);
-    scene
-        .add_light(Light::point(6.0).with_intensity(0.45))
-        .set_position(Vec3::new(-2.0, 1.5, 2.5));
+fn spawn_pure_simplex_view(rig: &mut SceneNode3d, pipeline: &HexWorldPipelineRenderStruct) {
     let radius = globe_radius(pipeline);
-    *camera = orbit_camera(3.0 * radius);
-    scene
-        .add_mesh(simplex_dots_gpu_mesh(pipeline), Vec3::splat(radius))
+    rig.add_mesh(simplex_dots_gpu_mesh(pipeline), Vec3::splat(radius))
         .set_color(Color::new(1.0, 1.0, 1.0, 1.0))
         .set_metallic(0.0)
         .set_roughness(0.92);
 }
 
-fn spawn_chunk_nodes(scene: &mut SceneNode3d, meshes: [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT], scale: f32) -> HexChunks {
+fn spawn_chunk_nodes(
+    rig: &mut SceneNode3d,
+    meshes: [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT],
+    scale: f32,
+) -> HexChunks {
     let normals = helpers::ico_face_normals();
     let nodes = core::array::from_fn(|i| {
-        scene
-            .add_mesh(meshes[i].clone(), Vec3::splat(scale))
-            .set_color(Color::new(1.0, 1.0, 1.0, 1.0))
-            .set_metallic(0.0)
-            .set_roughness(0.92)
-            .enable_backface_culling(true)
+        let mut node = rig.add_mesh(meshes[i].clone(), Vec3::splat(scale));
+        style_hex_node(&mut node);
+        node
     });
-    HexChunks { nodes, normals }
+    HexChunks {
+        nodes,
+        normals,
+        detail: None,
+    }
 }
 
 fn height_ramp_image() -> DynamicImage {
@@ -122,11 +270,25 @@ fn height_ramp_image() -> DynamicImage {
     }))
 }
 
-fn push_gpu_mesh(coords: Vec<Vec3>, faces: Vec<[VertexIndex; 3]>, uvs: Vec<Vec2>, normals: Option<Vec<Vec3>>) -> Rc<RefCell<GpuMesh3d>> {
-    Rc::new(RefCell::new(GpuMesh3d::new(coords, faces, normals, Some(uvs), false)))
+fn push_gpu_mesh(
+    coords: Vec<Vec3>,
+    faces: Vec<[VertexIndex; 3]>,
+    uvs: Vec<Vec2>,
+    normals: Option<Vec<Vec3>>,
+) -> Rc<RefCell<GpuMesh3d>> {
+    Rc::new(RefCell::new(GpuMesh3d::new(
+        coords,
+        faces,
+        normals,
+        Some(uvs),
+        false,
+    )))
 }
 
-fn hex_fan_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8]) -> [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT] {
+fn hex_fan_chunk_meshes(
+    pipeline: &HexWorldPipelineRenderStruct,
+    cell_face: &[u8],
+) -> [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT] {
     let n = pipeline.n as usize;
     let verts = &pipeline.hex_verts;
     let tans = &pipeline.norm_height;
@@ -139,7 +301,11 @@ fn hex_fan_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8
     for cell in 0..n {
         let chunk = cell_face[cell] as usize;
         let cnt = pipeline.neighbor_cnt[cell] as usize;
-        let remap_vert = |v: u32, coords: &mut [Vec<Vec3>], uvs: &mut [Vec<Vec2>], remap: &mut [i32]| -> VertexIndex {
+        let remap_vert = |v: u32,
+                          coords: &mut [Vec<Vec3>],
+                          uvs: &mut [Vec<Vec2>],
+                          remap: &mut [i32]|
+         -> VertexIndex {
             let v = v as usize;
             if remap[v] >= 0 {
                 return remap[v] as VertexIndex;
@@ -169,10 +335,74 @@ fn hex_fan_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8
         }
     }
 
-    core::array::from_fn(|i| push_gpu_mesh(core::mem::take(&mut coords[i]), core::mem::take(&mut faces[i]), core::mem::take(&mut uvs[i]), None))
+    core::array::from_fn(|i| {
+        push_gpu_mesh(
+            core::mem::take(&mut coords[i]),
+            core::mem::take(&mut faces[i]),
+            core::mem::take(&mut uvs[i]),
+            None,
+        )
+    })
 }
 
-fn compact_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8]) -> [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT] {
+fn hex_fan_cells_mesh(
+    pipeline: &HexWorldPipelineRenderStruct,
+    cells: &[i32],
+) -> Rc<RefCell<GpuMesh3d>> {
+    let verts = &pipeline.hex_verts;
+    let tans = &pipeline.norm_height;
+    let idx = &pipeline.tri_faces_idxs;
+    let mut coords = Vec::with_capacity(cells.len() * 7);
+    let mut uvs = Vec::with_capacity(cells.len() * 7);
+    let mut faces = Vec::with_capacity(cells.len() * 6);
+
+    for &cell_i in cells {
+        let cell = cell_i as usize;
+        let cnt = pipeline.neighbor_cnt[cell] as usize;
+        let vert_base = coords.len() as u32;
+        for local in 0..=cnt {
+            let v = cell * 7 + local;
+            let o = v * 3;
+            coords.push(Vec3::new(
+                verts[o] * DETAIL_SHELL,
+                verts[o + 1] * DETAIL_SHELL,
+                verts[o + 2] * DETAIL_SHELL,
+            ));
+            uvs.push(Vec2::new(tans[v], 0.5));
+        }
+        let origin = cell * 7;
+        for t in 0..cnt {
+            let base = cell * 18 + t * 3;
+            let a = idx[base] as usize;
+            let b = idx[base + 1] as usize;
+            let c = idx[base + 2] as usize;
+            if a == b && b == c {
+                continue;
+            }
+            if a < origin || b < origin || c < origin {
+                continue;
+            }
+            let la = a - origin;
+            let lb = b - origin;
+            let lc = c - origin;
+            if la > cnt || lb > cnt || lc > cnt {
+                continue;
+            }
+            faces.push([
+                vert_base + la as u32,
+                vert_base + lb as u32,
+                vert_base + lc as u32,
+            ]);
+        }
+    }
+
+    push_gpu_mesh(coords, faces, uvs, None)
+}
+
+fn compact_chunk_meshes(
+    pipeline: &HexWorldPipelineRenderStruct,
+    cell_face: &[u8],
+) -> [Rc<RefCell<GpuMesh3d>>; CHUNK_COUNT] {
     let n = pipeline.n as usize;
     let mut buckets: [Vec<[u32; 3]>; CHUNK_COUNT] = core::array::from_fn(|_| Vec::new());
     for i in 0..n {
@@ -206,7 +436,11 @@ fn compact_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8
                     e1[0] * e2[1] - e1[1] * e2[0],
                 ];
                 let outward = cross[0] * p0[0] + cross[1] * p0[1] + cross[2] * p0[2];
-                let tri = if outward < 0.0 { [i0, b, a] } else { [i0, a, b] };
+                let tri = if outward < 0.0 {
+                    [i0, b, a]
+                } else {
+                    [i0, a, b]
+                };
                 buckets[cell_face[i] as usize].push(tri);
             }
         }
@@ -241,11 +475,59 @@ fn compact_chunk_meshes(pipeline: &HexWorldPipelineRenderStruct, cell_face: &[u8
     })
 }
 
-fn spawn_hex_globe_view(scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pipeline: &HexWorldPipelineRenderStruct) -> HexChunks {
-    add_globe_lights(scene);
-    let radius = globe_radius(pipeline);
-    *camera = orbit_camera(3.0 * radius);
+fn empty_detail(n: usize) -> DetailLod {
+    DetailLod {
+        node: None,
+        center: i32::MIN,
+        seen: vec![0; n],
+        seen_gen: 0,
+        order: Vec::new(),
+        dist: Vec::new(),
+    }
+}
 
+fn sync_detail_lod(
+    lod: &mut DetailLod,
+    rig: &mut SceneNode3d,
+    pipeline: &HexWorldPipelineRenderStruct,
+    scale: f32,
+) {
+    let local = rig.inverse_rotation().mul_vec3(Vec3::Z);
+    let cell = helpers::nearest_cell_idx(
+        local.x,
+        local.y,
+        local.z,
+        &pipeline.cell_unit_sphere_pos,
+        pipeline.ws,
+    );
+    if cell == lod.center {
+        return;
+    }
+    helpers::write_cell_disk(
+        cell,
+        DETAIL_HEX_RADIUS,
+        &pipeline.neighbor_ids,
+        &pipeline.neighbor_cnt,
+        &mut lod.seen,
+        &mut lod.seen_gen,
+        &mut lod.order,
+        &mut lod.dist,
+    );
+    if let Some(node) = lod.node.as_mut() {
+        node.remove();
+    }
+    let mesh = hex_fan_cells_mesh(pipeline, &lod.order);
+    let mut node = rig.add_mesh(mesh, Vec3::splat(scale));
+    style_hex_node(&mut node);
+    lod.node = Some(node);
+    lod.center = cell;
+}
+
+fn spawn_hex_globe_view(
+    rig: &mut SceneNode3d,
+    pipeline: &HexWorldPipelineRenderStruct,
+) -> HexChunks {
+    let radius = globe_radius(pipeline);
     TextureManager::get_global_manager(|tm| {
         tm.add_image(height_ramp_image(), HEIGHT_RAMP_TEX);
     });
@@ -257,41 +539,67 @@ fn spawn_hex_globe_view(scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pip
     } else {
         compact_chunk_meshes(pipeline, &cell_face)
     };
-    let mut chunks = spawn_chunk_nodes(scene, meshes, radius);
-    for node in &mut chunks.nodes {
-        node.set_texture_with_name(HEIGHT_RAMP_TEX);
+    let mut chunks = spawn_chunk_nodes(rig, meshes, radius);
+    if pipeline.ws > HEX_FAN_MAX_WS {
+        chunks.detail = Some(empty_detail(pipeline.n as usize));
     }
     chunks
 }
 
-fn cull_hex_chunks(chunks: &mut HexChunks, eye: Vec3) {
+fn cull_hex_chunks(chunks: &mut HexChunks, eye: Vec3, rot: Quat) {
     let eye_len = eye.length();
     let keep = -0.35 * eye_len;
     for i in 0..CHUNK_COUNT {
         let n = chunks.normals[i];
-        let facing = n[0] * eye.x + n[1] * eye.y + n[2] * eye.z;
+        let wn = rot.mul_vec3(Vec3::new(n[0], n[1], n[2]));
+        let facing = wn.x * eye.x + wn.y * eye.y + wn.z * eye.z;
         chunks.nodes[i].set_visible(facing > keep);
     }
 }
 
-fn spawn_curr_mode(curr_mode: RenderMode, scene: &mut SceneNode3d, camera: &mut OrbitCamera3d, pipeline: &HexWorldPipelineRenderStruct) -> ActiveView {
-    match curr_mode {
+fn sync_view(view: &mut LiveView, eye: Vec3, pipeline: &HexWorldPipelineRenderStruct) {
+    let LiveView { rig, kind } = view;
+    if let ActiveView::Hex(chunks) = kind {
+        cull_hex_chunks(chunks, eye, rig.rotation());
+        if let Some(lod) = &mut chunks.detail {
+            sync_detail_lod(lod, rig, pipeline, globe_radius(pipeline));
+        }
+    }
+}
+
+fn open_view(
+    scene: &mut SceneNode3d,
+    mode: RenderMode,
+    pipeline: &HexWorldPipelineRenderStruct,
+) -> LiveView {
+    add_globe_lights(scene);
+    let mut rig = scene.add_group();
+    rig.set_position(Vec3::ZERO);
+    let kind = match mode {
         RenderMode::PureSimplex => {
-            spawn_pure_simplex_view(scene, camera, pipeline);
+            spawn_pure_simplex_view(&mut rig, pipeline);
+            scene
+                .add_light(Light::point(6.0).with_intensity(0.45))
+                .set_position(Vec3::new(-2.0, 1.5, 2.5));
             ActiveView::Simplex
         }
-        RenderMode::HexGlobe => ActiveView::Hex(spawn_hex_globe_view(scene, camera, pipeline)),
-    }
+        RenderMode::HexGlobe => ActiveView::Hex(spawn_hex_globe_view(&mut rig, pipeline)),
+    };
+    LiveView { rig, kind }
 }
 
 pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
     let mut window = Window::new("globe_render").await;
-    window.set_ambient(0.25);
-    let mut camera = orbit_camera(3.0);
+    window.set_ambient(0.8);
+    let radius = globe_radius(pipeline);
+    let view = Rc::new(RefCell::new(LiveView {
+        rig: SceneNode3d::empty(),
+        kind: ActiveView::Simplex,
+    }));
+    let mut camera = GlobeCamera::new(radius, view.clone(), pipeline);
     let mut scene = SceneNode3d::empty();
-
     let mut render_mode = RenderMode::HexGlobe;
-    let mut view = spawn_curr_mode(render_mode, &mut scene, &mut camera, pipeline);
+    *view.borrow_mut() = open_view(&mut scene, render_mode, pipeline);
 
     let switch_render_mode = |curr_mode: RenderMode| {
         if curr_mode == RenderMode::PureSimplex {
@@ -302,17 +610,12 @@ pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
     };
 
     while window.render_3d(&mut scene, &mut camera).await {
-        if let ActiveView::Hex(chunks) = &mut view {
-            cull_hex_chunks(chunks, camera.eye());
-        }
         for event in window.events().iter() {
-            match event.value {
-                WindowEvent::Key(Key::G, Action::Press, _) => {
-                    render_mode = switch_render_mode(render_mode);
-                    scene = SceneNode3d::empty();
-                    view = spawn_curr_mode(render_mode, &mut scene, &mut camera, pipeline);
-                }
-                _ => {}
+            if let WindowEvent::Key(Key::G, Action::Press, _) = event.value {
+                render_mode = switch_render_mode(render_mode);
+                scene = SceneNode3d::empty();
+                camera.frame_radius(radius);
+                *view.borrow_mut() = open_view(&mut scene, render_mode, pipeline);
             }
         }
     }

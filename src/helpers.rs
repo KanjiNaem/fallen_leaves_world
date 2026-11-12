@@ -58,7 +58,6 @@ fn add3(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
     add_vec3(add_vec3(a, b), c)
 }
 
-
 fn north_verts(k: i32) -> [f32; 3] {
     let a = std::f32::consts::TAU * k as f32 / 5.0;
     [ICO_R * a.cos(), ICO_R * a.sin(), ICO_Z]
@@ -288,7 +287,12 @@ pub fn cell_pos_on_sphere(idx: i32, ws: i32) -> [f32; 3] {
     pos_from_raw(idx_to_raw(idx, ws), ws, &ico, &faces, &edges)
 }
 
-fn ico_face_of_raw(raw: i32, ws: i32, faces: &[[usize; 3]; 20], edges: &[(usize, usize); 30]) -> usize {
+fn ico_face_of_raw(
+    raw: i32,
+    ws: i32,
+    faces: &[[usize; 3]; 20],
+    edges: &[(usize, usize); 30],
+) -> usize {
     if raw < 12 {
         let v = raw as usize;
         return faces
@@ -378,13 +382,19 @@ pub fn gen_neighbor_id_and_cnt_data(
         for a in 0..=ws {
             for b in 0..=(ws - a) {
                 let c = ws - a - b;
-                let id = raw_to_idx(bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a, b, c, ws, face_i, &edges), ws);
+                let id = raw_to_idx(
+                    bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a, b, c, ws, face_i, &edges),
+                    ws,
+                );
                 for (dif_a, dif_b, dif_c) in steps {
                     let (a2, b2, c2) = (a + dif_a, b + dif_b, c + dif_c);
                     if a2 < 0 || b2 < 0 || c2 < 0 || a2 + b2 + c2 != ws {
                         continue;
                     }
-                    let id2 = raw_to_idx(bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a2, b2, c2, ws, face_i, &edges), ws);
+                    let id2 = raw_to_idx(
+                        bary_to_raw(iv_idx0, iv_idx1, iv_idx2, a2, b2, c2, ws, face_i, &edges),
+                        ws,
+                    );
                     push_neighbor(neighbor_ids, neighbor_cnt, id, id2);
                     push_neighbor(neighbor_ids, neighbor_cnt, id2, id);
                 }
@@ -417,16 +427,193 @@ pub fn vec_to_cell_idx(x: f32, y: f32, z: f32, pos: &[f32], n: i32) -> i32 {
     best
 }
 
-pub fn gen_hex_vert_and_norm_height_and_tri_faces_data(global_data: &[f32], hex_vert_data_arr: &mut [f32], norm_height_data_arr: &mut [f32], tri_faces_data_array: &mut [u32], cell_unit_sphere_pos: &[f32], neighbor_ids: &[i32], neighbor_cnt: &[u8], n: i32, world_height: f32) -> () {
+fn bary_weights(c0: [f32; 3], c1: [f32; 3], c2: [f32; 3], p: [f32; 3]) -> Option<[f32; 3]> {
+    let n0 = cross_vec3(c1, c2);
+    let det = dot_vec3(c0, n0);
+    if det.abs() < EPS {
+        return None;
+    }
+    let inv = 1.0 / det;
+    Some([
+        dot_vec3(n0, p) * inv,
+        dot_vec3(cross_vec3(c2, c0), p) * inv,
+        dot_vec3(cross_vec3(c0, c1), p) * inv,
+    ])
+}
+
+fn round_bary(a: f32, b: f32, c: f32, ws: i32) -> (i32, i32, i32) {
+    let mut ints = [a.floor() as i32, b.floor() as i32, c.floor() as i32];
+    let mut frac = [a - ints[0] as f32, b - ints[1] as f32, c - ints[2] as f32];
+    let mut sum = ints[0] + ints[1] + ints[2];
+    let mut guard = 0;
+    while sum < ws && guard < 8 {
+        let mut pick = 0;
+        if frac[1] > frac[pick] {
+            pick = 1;
+        }
+        if frac[2] > frac[pick] {
+            pick = 2;
+        }
+        ints[pick] += 1;
+        frac[pick] = 0.0;
+        sum += 1;
+        guard += 1;
+    }
+    guard = 0;
+    while sum > ws && guard < 8 {
+        let mut pick = None;
+        for k in 0..3 {
+            if ints[k] <= 0 {
+                continue;
+            }
+            match pick {
+                None => pick = Some(k),
+                Some(p) if frac[k] < frac[p] => pick = Some(k),
+                _ => {}
+            }
+        }
+        let Some(pick) = pick else {
+            break;
+        };
+        ints[pick] -= 1;
+        frac[pick] = 1.0;
+        sum -= 1;
+        guard += 1;
+    }
+    (ints[0], ints[1], ints[2])
+}
+
+pub fn nearest_cell_idx(x: f32, y: f32, z: f32, pos: &[f32], ws: i32) -> i32 {
+    let n = 10 * ws * ws + 2;
+    debug_assert_eq!(pos.len(), (n * 3) as usize);
+    let dir = normalize_vec3([x, y, z]);
+    let ico = ico_positions();
+    let faces = ico_faces();
+    let edges = ico_edges();
+    let steps = [
+        (0, 0, 0),
+        (1, -1, 0),
+        (-1, 1, 0),
+        (1, 0, -1),
+        (-1, 0, 1),
+        (0, 1, -1),
+        (0, -1, 1),
+    ];
+    let mut best_idx = 0i32;
+    let mut best_dot = f32::NEG_INFINITY;
+    for (face_i, face) in faces.iter().enumerate() {
+        let v0 = ico[face[0]];
+        let v1 = ico[face[1]];
+        let v2 = ico[face[2]];
+        let Some(w) = bary_weights(v0, v1, v2, dir) else {
+            continue;
+        };
+        if w[0] < -1.0e-3 || w[1] < -1.0e-3 || w[2] < -1.0e-3 {
+            continue;
+        }
+        let sum = w[0].max(0.0) + w[1].max(0.0) + w[2].max(0.0);
+        if sum < EPS {
+            continue;
+        }
+        let scale = ws as f32 / sum;
+        let (a, b, c) = round_bary(
+            w[0].max(0.0) * scale,
+            w[1].max(0.0) * scale,
+            w[2].max(0.0) * scale,
+            ws,
+        );
+        for (da, db, dc) in steps {
+            let (a2, b2, c2) = (a + da, b + db, c + dc);
+            if a2 < 0 || b2 < 0 || c2 < 0 || a2 + b2 + c2 != ws {
+                continue;
+            }
+            let idx = raw_to_idx(
+                bary_to_raw(face[0], face[1], face[2], a2, b2, c2, ws, face_i, &edges),
+                ws,
+            );
+            if idx < 0 || idx >= n {
+                continue;
+            }
+            let d = dot_vec3(dir, read_pos_xyz(pos, idx));
+            if d > best_dot {
+                best_dot = d;
+                best_idx = idx;
+            }
+        }
+    }
+    best_idx
+}
+
+pub fn write_cell_disk(
+    center: i32,
+    radius: i32,
+    neighbor_ids: &[i32],
+    neighbor_cnt: &[u8],
+    seen: &mut [u32],
+    seen_gen: &mut u32,
+    order: &mut Vec<i32>,
+    dist: &mut Vec<u16>,
+) {
+    debug_assert!(radius >= 0);
+    debug_assert_eq!(seen.len(), neighbor_cnt.len());
+    debug_assert_eq!(neighbor_ids.len(), neighbor_cnt.len() * 6);
+    order.clear();
+    dist.clear();
+    *seen_gen = seen_gen.wrapping_add(1);
+    if *seen_gen == 0 {
+        seen.fill(0);
+        *seen_gen = 1;
+    }
+    let stamp = *seen_gen;
+    seen[center as usize] = stamp;
+    order.push(center);
+    dist.push(0);
+    let mut q = 0;
+    while q < order.len() {
+        let cur = order[q] as usize;
+        let d = dist[q];
+        q += 1;
+        if d as i32 == radius {
+            continue;
+        }
+        let base = cur * 6;
+        let cnt = neighbor_cnt[cur] as usize;
+        for k in 0..cnt {
+            let nb = neighbor_ids[base + k];
+            if nb < 0 {
+                continue;
+            }
+            let nb_u = nb as usize;
+            if seen[nb_u] == stamp {
+                continue;
+            }
+            seen[nb_u] = stamp;
+            order.push(nb);
+            dist.push(d + 1);
+        }
+    }
+}
+
+pub fn gen_hex_vert_and_norm_height_and_tri_faces_data(
+    global_data: &[f32],
+    hex_vert_data_arr: &mut [f32],
+    norm_height_data_arr: &mut [f32],
+    tri_faces_data_array: &mut [u32],
+    cell_unit_sphere_pos: &[f32],
+    neighbor_ids: &[i32],
+    neighbor_cnt: &[u8],
+    n: i32,
+    world_height: f32,
+) -> () {
     let n = n as usize;
     let lo = 0.0;
     for curr_idx in 0..n {
         let height_idx = n + curr_idx;
         let curr_height = global_data[height_idx];
         let norm_height = ((curr_height - lo) / (world_height - lo)).clamp(0.0, 1.0);
-        
+
         let total_vert_basis = curr_idx * 21;
-        let uvs_basis = curr_idx * 7; 
+        let uvs_basis = curr_idx * 7;
         let faces_basis = curr_idx * 18;
         let neighbor_basis = curr_idx * 6;
         let curr_neighbor_cnt = neighbor_cnt[curr_idx] as usize;
@@ -483,7 +670,11 @@ pub fn gen_hex_vert_and_norm_height_and_tri_faces_data(global_data: &[f32], hex_
                 hex_vert_data_arr[tri_2_vert_basis + 2],
             ];
 
-            if dot_vec3(cross_vec3(sub_vec3(vert_1, vert_0), sub_vec3(vert_2, vert_0)), center) < 0.0 {
+            if dot_vec3(
+                cross_vec3(sub_vec3(vert_1, vert_0), sub_vec3(vert_2, vert_0)),
+                center,
+            ) < 0.0
+            {
                 core::mem::swap(&mut i1, &mut i2);
             }
 
@@ -491,6 +682,5 @@ pub fn gen_hex_vert_and_norm_height_and_tri_faces_data(global_data: &[f32], hex_
             tri_faces_data_array[faces_basis + i * 3 + 1] = i1;
             tri_faces_data_array[faces_basis + i * 3 + 2] = i2;
         }
-    
     }
 }
