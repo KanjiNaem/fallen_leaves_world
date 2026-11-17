@@ -268,16 +268,52 @@ fn spawn_chunk_nodes(
     }
 }
 
-fn height_ramp_image() -> DynamicImage {
-    let lo = [46u8, 140, 62];
-    let hi = [12u8, 12, 12];
+fn lerp_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
+    let t = t.clamp(0.0, 1.0);
+    [
+        (a[0] as f32 + (b[0] as f32 - a[0] as f32) * t).round() as u8,
+        (a[1] as f32 + (b[1] as f32 - a[1] as f32) * t).round() as u8,
+        (a[2] as f32 + (b[2] as f32 - a[2] as f32) * t).round() as u8,
+    ]
+}
+
+fn sample_stops(stops: &[(f32, [u8; 3])], t: f32) -> [u8; 3] {
+    let t = t.clamp(0.0, 1.0);
+    let mut i = 0;
+    while i + 1 < stops.len() && t > stops[i + 1].0 {
+        i += 1;
+    }
+    let (t0, c0) = stops[i];
+    let (t1, c1) = stops[i + 1];
+    let span = (t1 - t0).max(1.0e-5);
+    lerp_rgb(c0, c1, (t - t0) / span)
+}
+
+fn height_ramp_image(world_height: f32, water_lvl: i32) -> DynamicImage {
+    let water = if world_height > 0.0 {
+        (water_lvl as f32 / world_height).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let land_span = (1.0 - water).max(1.0e-5);
+    let deep = [8u8, 30, 78];
+    let shallow = [96u8, 186, 235];
+    let land = [
+        (0.00, [34u8, 160, 55]),
+        (0.22, [16u8, 88, 38]),
+        (0.48, [232u8, 122, 28]),
+        (0.74, [196u8, 36, 28]),
+        (1.00, [110u8, 16, 16]),
+    ];
     DynamicImage::ImageRgb8(ImageBuffer::from_fn(256, 1, |x, _| {
-        let t = x as f32 / 255.0;
-        Rgb([
-            (lo[0] as f32 + (hi[0] as f32 - lo[0] as f32) * t).round() as u8,
-            (lo[1] as f32 + (hi[1] as f32 - lo[1] as f32) * t).round() as u8,
-            (lo[2] as f32 + (hi[2] as f32 - lo[2] as f32) * t).round() as u8,
-        ])
+        let u = x as f32 / 255.0;
+        let rgb = if water >= 1.0 || u < water {
+            let t = if water > 0.0 { (u / water).min(1.0) } else { 1.0 };
+            lerp_rgb(deep, shallow, t)
+        } else {
+            sample_stops(&land, ((u - water) / land_span).clamp(0.0, 1.0))
+        };
+        Rgb(rgb)
     }))
 }
 
@@ -540,7 +576,10 @@ fn spawn_hex_globe_view(
 ) -> HexChunks {
     let radius = globe_radius(pipeline);
     TextureManager::get_global_manager(|tm| {
-        tm.add_image(height_ramp_image(), HEIGHT_RAMP_TEX);
+        tm.add_image(
+            height_ramp_image(pipeline.world_height, pipeline.water_lvl),
+            HEIGHT_RAMP_TEX,
+        );
     });
 
     let mut cell_face = vec![0u8; pipeline.n as usize];

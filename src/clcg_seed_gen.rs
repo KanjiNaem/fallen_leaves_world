@@ -26,7 +26,7 @@ impl Clcg {
         u as u32
     }
 
-    /// Uniform float in [0, 1).
+    /// uniform float in [0, 1).
     pub fn next_f64(&mut self) -> f64 {
         self.next_u32() as f64 / (u32::MAX as f64 + 1.0)
     }
