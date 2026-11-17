@@ -3,6 +3,11 @@ fn read_pos_xyz(pos: &[f32], idx: i32) -> [f32; 3] {
     [pos[o], pos[o + 1], pos[o + 2]]
 }
 
+pub fn round_to(num: f32, dec_spaces: i32) -> f32 {
+    let factor: f32 = 10.0_f32.powi(dec_spaces);
+    (num * factor).round() / factor
+}
+
 fn tangent_basis(c: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     let r = if c[2].abs() < 0.9 {
         [0.0, 0.0, 1.0]

@@ -1,4 +1,4 @@
-use crate::{clcg_seed_gen::Clcg, simplex_noise::NoiseParamsPresetVals::DEFAULT};
+use crate::{clcg_seed_gen::Clcg};
 use core::panic;
 
 const SKEW_3D: f32 = 1.0 / 3.0;
@@ -11,6 +11,9 @@ const GRAD_3D_SIMPLEX: [f32; 36] = [
 
 pub enum NoiseParamsPresetVals {
     DEFAULT,
+    SHALLOW,
+    AMPLIFIED,
+    ARCHIPELAGO,
 }
 
 // freqs count simplex cells across unit r;; 1 is a hemisphere scale mass
@@ -34,7 +37,7 @@ pub struct NoiseParams {
 
 pub fn build_noise_params_preset(preset: NoiseParamsPresetVals) -> NoiseParams {
     match preset {
-        DEFAULT => NoiseParams {
+        NoiseParamsPresetVals::DEFAULT => NoiseParams {
             continent_octaves: 16,
             continent_frequency: 0.7,
             continent_attenuation: 0.4,
@@ -48,6 +51,48 @@ pub fn build_noise_params_preset(preset: NoiseParamsPresetVals) -> NoiseParams {
             warp_amplitude: 0.8,
             height_exponent: 1.7,
         },
+        NoiseParamsPresetVals::SHALLOW => NoiseParams {
+            continent_octaves: 1,
+            continent_frequency: 1.0,
+            continent_attenuation: 0.4,
+            continent_gain: 0.8,
+            detail_octaves: 4,
+            detail_frequency: 3.6,
+            detail_attenuation: 0.5,
+            detail_weight: 0.035,
+            warp_octaves: 16,
+            warp_frequency: 0.6,
+            warp_amplitude: 0.8,
+            height_exponent: 1.7,
+        },
+        NoiseParamsPresetVals::AMPLIFIED => NoiseParams {
+            continent_octaves: 2,
+            continent_frequency: 0.6,
+            continent_attenuation: 0.7,
+            continent_gain: 0.9,
+            detail_octaves: 4,
+            detail_frequency: 5.0,
+            detail_attenuation: 0.5,
+            detail_weight: 0.07,
+            warp_octaves: 16,
+            warp_frequency: 0.8,
+            warp_amplitude: 1.2,
+            height_exponent: 1.7,
+        },
+        NoiseParamsPresetVals::ARCHIPELAGO => NoiseParams {
+            continent_octaves: 16,
+            continent_frequency: 0.9,
+            continent_attenuation: 0.4,
+            continent_gain: 0.9,
+            detail_octaves: 4,
+            detail_frequency: 5.0,
+            detail_attenuation: 0.5,
+            detail_weight: 0.07,
+            warp_octaves: 16,
+            warp_frequency: 0.8,
+            warp_amplitude: 1.2,
+            height_exponent: 1.7,
+        }
     }
 }
 

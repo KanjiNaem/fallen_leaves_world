@@ -4,11 +4,11 @@ use fallen_leaves_world::{
 };
 #[kiss3d::main]
 async fn main() {
-    let ws = 500;
-    let master_seed: u64 = 100;
+    let ws = 200;
+    let master_seed: u64 = 1;
     let world_height: f32 = 500.0;
     let water_lvl: i32 = 200;
-    let world_noise_preset: NoiseParamsPresetVals = NoiseParamsPresetVals::DEFAULT;
+    let world_noise_preset: NoiseParamsPresetVals = NoiseParamsPresetVals::AMPLIFIED;
     let pipeline = gen_hex_world_pipeline_render_struct(
         ws,
         world_height,

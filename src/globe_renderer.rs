@@ -744,10 +744,12 @@ pub async fn render_hex_pipeline(pipeline: &HexWorldPipelineRenderStruct) {
             let rot = view.borrow().rig.rotation();
             let boundary = hex_boundary(pipeline, cell, rot);
             window.draw_polyline(&boundary);
+            let curr_cell_height_label = helpers::round_to(pipeline.global_noise_data[(pipeline.start_idx_height_adj_noise + cell) as usize], 2).to_string();
             let label = cell.to_string();
             let advance = 0.56 * HOVER_TEXT_SCALE * label.len() as f32;
             let x = (window.width() as f32 - advance - 18.0).max(8.0);
             window.draw_text(&label, Vec2::new(x, 16.0), HOVER_TEXT_SCALE, &font, RED);
+            window.draw_text(&curr_cell_height_label, Vec2::new(x, 56.0), HOVER_TEXT_SCALE, &font, GREEN);
         }
     }
 }
